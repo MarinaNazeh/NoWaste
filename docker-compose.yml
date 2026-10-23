@@ -1,0 +1,30 @@
+# Local development database (SDD C-28: PostgreSQL 16 + PostGIS 3).
+# The username and password below are for the local Docker database only.
+# They are not secrets and must never be used anywhere else.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: nowaste-db
+    environment:
+      POSTGRES_USER: nowaste
+      POSTGRES_PASSWORD: nowaste
+      POSTGRES_DB: nowaste
+    ports:
+      # Host port defaults to 5432. If another PostgreSQL already uses 5432 on your
+      # laptop, put DB_HOST_PORT=5433 in a root .env file (see README).
+      - '${DB_HOST_PORT:-5432}:5432'
+    volumes:
+      - nowaste_db_data:/var/lib/postgresql/data
+      # Creates the second database, nowaste_test, the first time the volume is created.
+      - ./server/db/init/20-create-test-db.sql:/docker-entrypoint-initdb.d/20-create-test-db.sql:ro
+    healthcheck:
+      # Checks over TCP and against nowaste_test, so "healthy" only appears after the first-run
+      # init scripts have finished (during init the server listens on a local socket only).
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U nowaste -d nowaste_test']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  nowaste_db_data:
+    name: nowaste_db_data

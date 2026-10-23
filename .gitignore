@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment files (secrets and local settings). The .env.example files are committed.
+.env
+.env.*
+!.env.example
+
+# Uploaded files on the server
+server/uploads/
+
+# Build output
+server/dist/
+
+# Test coverage
+coverage/
+
+# Expo
+.expo/
+
+# Logs and OS files
+npm-debug.log*
+.DS_Store
+Thumbs.db

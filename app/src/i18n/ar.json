@@ -1,0 +1,10 @@
+{
+  "app": {
+    "name": "NoWaste"
+  },
+  "home": {
+    "serverChecking": "الخادم: جارٍ التحقق…",
+    "serverConnected": "الخادم: متصل",
+    "serverNotReachable": "الخادم: تعذّر الوصول"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "app": {
+    "name": "NoWaste"
+  },
+  "home": {
+    "serverChecking": "Server: checking…",
+    "serverConnected": "Server: connected",
+    "serverNotReachable": "Server: not reachable"
+  }
+}
