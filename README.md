@@ -10,6 +10,7 @@ Requirements: [docs/SRS.pdf](docs/SRS.pdf). Design: [docs/SDD.pdf](docs/SDD.pdf)
 | `app/`               | Mobile app (SDD C-01): Expo + React Native + TypeScript + expo-router             |
 | `server/`            | Backend: REST API (`src/api.ts`, SDD C-02) and worker (`src/worker.ts`, SDD C-19) |
 | `server/migrations/` | Database migrations (node-pg-migrate, SQL files)                                  |
+| `shared/`            | `@nowaste/shared`: input rules used by both the app and the server (US-01)        |
 | `docs/`              | SRS, SDD, traceability, test plan, acceptance tests, feedback changes             |
 | `docker-compose.yml` | Local PostgreSQL 16 + PostGIS 3 database                                          |
 

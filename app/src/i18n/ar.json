@@ -1,10 +1,77 @@
 {
   "app": {
-    "name": "NoWaste"
+    "name": "NoWaste",
+    "logoLabel": "شعار NoWaste"
+  },
+  "language": {
+    "groupLabel": "لغة التطبيق",
+    "en": "English",
+    "ar": "العربية",
+    "optionHint": "يغيّر لغة التطبيق بالكامل"
   },
   "home": {
     "serverChecking": "الخادم: جارٍ التحقق…",
     "serverConnected": "الخادم: متصل",
     "serverNotReachable": "الخادم: تعذّر الوصول"
+  },
+  "welcome": {
+    "title": "مرحبًا بك في NoWaste",
+    "message": "اعثر على الطعام الفائض القريب منك بسعر أقل، وساعد في إنقاذ الطعام الجيد من الهدر.",
+    "register": "إنشاء حساب",
+    "registerHint": "إنشاء حساب مستهلك جديد",
+    "login": "تسجيل الدخول",
+    "loginHint": "تسجيل الدخول غير متاح بعد",
+    "loginComingSoon": "سيتوفر تسجيل الدخول قريبًا."
+  },
+  "register": {
+    "title": "إنشاء حساب",
+    "intro": "سجّل باستخدام بريدك الإلكتروني أو رقم هاتفك المحمول.",
+    "methodLabel": "التسجيل باستخدام",
+    "methodEmail": "البريد الإلكتروني",
+    "methodPhone": "رقم الهاتف المحمول",
+    "emailLabel": "البريد الإلكتروني",
+    "emailPlaceholder": "name@example.com",
+    "phoneLabel": "رقم الهاتف المحمول",
+    "phonePlaceholder": "01XXXXXXXXX",
+    "phoneHint": "11 رقمًا تبدأ بـ 010 أو 011 أو 012 أو 015",
+    "passwordLabel": "كلمة المرور",
+    "showPassword": "إظهار",
+    "hidePassword": "إخفاء",
+    "showPasswordLabel": "إظهار كلمة المرور",
+    "hidePasswordLabel": "إخفاء كلمة المرور",
+    "rulesTitle": "يجب أن تحتوي كلمة المرور على:",
+    "ruleMinLength": "{{count}} أحرف على الأقل",
+    "ruleLetter": "حرف واحد على الأقل",
+    "ruleDigit": "رقم واحد على الأقل",
+    "ruleMet": "متحقق",
+    "ruleNotMet": "غير متحقق",
+    "submit": "إنشاء الحساب",
+    "submitting": "جارٍ إنشاء حسابك…"
+  },
+  "errors": {
+    "fixFields": "يُرجى تصحيح الحقول المحددة.",
+    "emailRequired": "أدخل بريدك الإلكتروني.",
+    "emailInvalid": "أدخل بريدًا إلكترونيًا صحيحًا، مثل name@example.com.",
+    "phoneRequired": "أدخل رقم هاتفك المحمول.",
+    "phoneInvalid": "أدخل رقم هاتف محمول مصريًا: 11 رقمًا يبدأ بـ 010 أو 011 أو 012 أو 015.",
+    "passwordInvalid": "كلمة المرور لا تستوفي الشروط أدناه.",
+    "languageInvalid": "اختر العربية أو الإنجليزية.",
+    "unreachable": "تعذّر الاتصال بالخادم. تحقّق من اتصالك بالإنترنت وحاول مرة أخرى.",
+    "unexpected": "حدث خطأ ما. يُرجى المحاولة مرة أخرى."
+  },
+  "duplicate": {
+    "emailTitle": "هذا البريد الإلكتروني مسجّل بالفعل",
+    "phoneTitle": "رقم الهاتف هذا مسجّل بالفعل",
+    "message": "إذا كان هذا حسابك، فسجّل الدخول أو أعد تعيين كلمة المرور.",
+    "login": "تسجيل الدخول",
+    "resetPassword": "إعادة تعيين كلمة المرور",
+    "resetContact": "إعادة تعيين كلمة المرور غير متاحة في التطبيق بعد. يُرجى التواصل مع فريق NoWaste لإعادة تعيينها."
+  },
+  "registered": {
+    "title": "تم إنشاء الحساب",
+    "successLabel": "تم بنجاح",
+    "message": "حسابك كمستهلك في NoWaste جاهز.",
+    "next": "سيتوفر تسجيل الدخول قريبًا، وبعدها يمكنك البحث عن الطعام القريب منك.",
+    "backToStart": "العودة إلى البداية"
   }
 }

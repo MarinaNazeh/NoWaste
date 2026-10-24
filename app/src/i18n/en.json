@@ -1,10 +1,77 @@
 {
   "app": {
-    "name": "NoWaste"
+    "name": "NoWaste",
+    "logoLabel": "NoWaste logo"
+  },
+  "language": {
+    "groupLabel": "App language",
+    "en": "English",
+    "ar": "العربية",
+    "optionHint": "Changes the language of the whole app"
   },
   "home": {
     "serverChecking": "Server: checking…",
     "serverConnected": "Server: connected",
     "serverNotReachable": "Server: not reachable"
+  },
+  "welcome": {
+    "title": "Welcome to NoWaste",
+    "message": "Find surplus food near you at a lower price, and help keep good food from going to waste.",
+    "register": "Register",
+    "registerHint": "Create a new consumer account",
+    "login": "Log in",
+    "loginHint": "Log in is not available yet",
+    "loginComingSoon": "Log in will be available soon."
+  },
+  "register": {
+    "title": "Create account",
+    "intro": "Sign up with your email address or your mobile number.",
+    "methodLabel": "Sign up with",
+    "methodEmail": "Email",
+    "methodPhone": "Mobile number",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "name@example.com",
+    "phoneLabel": "Mobile number",
+    "phonePlaceholder": "01XXXXXXXXX",
+    "phoneHint": "11 digits, starting with 010, 011, 012 or 015",
+    "passwordLabel": "Password",
+    "showPassword": "Show",
+    "hidePassword": "Hide",
+    "showPasswordLabel": "Show password",
+    "hidePasswordLabel": "Hide password",
+    "rulesTitle": "Your password needs:",
+    "ruleMinLength": "At least {{count}} characters",
+    "ruleLetter": "At least one letter",
+    "ruleDigit": "At least one number",
+    "ruleMet": "met",
+    "ruleNotMet": "not met",
+    "submit": "Create account",
+    "submitting": "Creating your account…"
+  },
+  "errors": {
+    "fixFields": "Please correct the highlighted fields.",
+    "emailRequired": "Enter your email address.",
+    "emailInvalid": "Enter a valid email address, for example name@example.com.",
+    "phoneRequired": "Enter your mobile number.",
+    "phoneInvalid": "Enter an Egyptian mobile number: 11 digits starting with 010, 011, 012 or 015.",
+    "passwordInvalid": "The password does not meet the rules below.",
+    "languageInvalid": "Choose English or Arabic.",
+    "unreachable": "We could not reach the server. Check your connection and try again.",
+    "unexpected": "Something went wrong. Please try again."
+  },
+  "duplicate": {
+    "emailTitle": "This email is already registered",
+    "phoneTitle": "This mobile number is already registered",
+    "message": "If this is your account, log in instead or reset your password.",
+    "login": "Log in",
+    "resetPassword": "Reset password",
+    "resetContact": "Password reset is not in the app yet. Please contact the NoWaste team and they will reset your password."
+  },
+  "registered": {
+    "title": "Account created",
+    "successLabel": "Success",
+    "message": "Your NoWaste consumer account is ready.",
+    "next": "Log in will be available soon. You can then start finding food near you.",
+    "backToStart": "Back to start"
   }
 }

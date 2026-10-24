@@ -5,7 +5,8 @@
   "description": "NoWaste: location-based app that reduces food waste in Egypt (course project).",
   "workspaces": [
     "app",
-    "server"
+    "server",
+    "shared"
   ],
   "engines": {
     "node": ">=24"

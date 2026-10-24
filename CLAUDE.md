@@ -40,7 +40,8 @@
 
 ## Packages
 
-- npm workspaces: one package-lock.json at the root. Never run `npm install` inside app/ or server/.
+- npm workspaces: one package-lock.json at the root. Never run `npm install` inside app/, server/ or shared/.
+- Validation rules that the app and the server must both apply live once in shared/ (`@nowaste/shared`).
 - Add a package from the root with `npm install <name> -w app` or `npm install <name> -w server`.
 
 ## End of every task
