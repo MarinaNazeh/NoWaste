@@ -1,0 +1,68 @@
+// C-27 Data Access: the users table (SDD 4.2 "User").
+import { DatabaseError } from 'pg';
+import { getPool } from './db.js';
+
+export type Role = 'consumer' | 'vendor' | 'charity' | 'composting' | 'admin';
+export type AccountStatus = 'Active' | 'Pending' | 'Approved' | 'Rejected' | 'Suspended' | 'Removed';
+export type Language = 'ar' | 'en';
+
+export interface UserRecord {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  passwordHash: string;
+  role: Role;
+  status: AccountStatus;
+  language: Language;
+  createdAt: Date;
+}
+
+export interface NewUser {
+  email: string | null;
+  phone: string | null;
+  passwordHash: string;
+  role: Role;
+  status: AccountStatus;
+  language: Language;
+}
+
+/** Thrown when the email or phone already exists (unique constraint), so the service can answer E-ACC-01. */
+export class DuplicateUserError extends Error {
+  constructor(readonly field: 'email' | 'phone') {
+    super(`A user with this ${field} already exists`);
+  }
+}
+
+const columns = `id, email, phone, password_hash AS "passwordHash", role, status, language, created_at AS "createdAt"`;
+
+export async function insertUser(user: NewUser): Promise<UserRecord> {
+  try {
+    const result = await getPool().query<UserRecord>(
+      `INSERT INTO users (email, phone, password_hash, role, status, language)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING ${columns}`,
+      [user.email, user.phone, user.passwordHash, user.role, user.status, user.language],
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      throw new Error('INSERT INTO users returned no row');
+    }
+    return row;
+  } catch (error) {
+    // 23505 = unique_violation. The email check comes first, matching the order the app shows the fields.
+    if (error instanceof DatabaseError && error.code === '23505') {
+      throw new DuplicateUserError(error.constraint === 'users_phone_key' ? 'phone' : 'email');
+    }
+    throw error;
+  }
+}
+
+export async function findUserByEmail(email: string): Promise<UserRecord | undefined> {
+  const result = await getPool().query<UserRecord>(`SELECT ${columns} FROM users WHERE email = $1`, [email]);
+  return result.rows[0];
+}
+
+export async function findUserByPhone(phone: string): Promise<UserRecord | undefined> {
+  const result = await getPool().query<UserRecord>(`SELECT ${columns} FROM users WHERE phone = $1`, [phone]);
+  return result.rows[0];
+}

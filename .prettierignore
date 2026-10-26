@@ -1,0 +1,7 @@
+node_modules
+package-lock.json
+server/dist
+coverage
+.expo
+docs/*.pdf
+app/expo-env.d.ts

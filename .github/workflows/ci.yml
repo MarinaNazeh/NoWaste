@@ -1,0 +1,61 @@
+# Runs the automated tests on every push and on every pull request to main (SRS NFR-13).
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: nowaste
+          POSTGRES_PASSWORD: nowaste
+          POSTGRES_DB: nowaste_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nowaste -d nowaste_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      # CI-only throwaway database inside the service container; not a secret.
+      TEST_DATABASE_URL: postgres://nowaste:nowaste@localhost:5432/nowaste_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations on the test database
+        run: npm run migrate:test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
