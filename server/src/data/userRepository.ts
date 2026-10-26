@@ -2,7 +2,7 @@
 import { DatabaseError, type Pool, type PoolClient } from 'pg';
 import { getPool } from './db.js';
 
-export type Role = 'consumer' | 'vendor' | 'charity' | 'composting' | 'admin';
+export type Role = 'consumer' | 'vendor' | 'charity' | 'composting' | 'other' | 'admin';
 export type AccountStatus = 'Active' | 'Pending' | 'Approved' | 'Rejected' | 'Suspended' | 'Removed';
 export type Language = 'ar' | 'en';
 

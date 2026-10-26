@@ -28,6 +28,7 @@ export async function readPartnerProfile(userId: string) {
   const result = await getPool().query<Record<string, unknown>>(
     `SELECT organisation_name AS "organisationName", partner_type AS "partnerType", address,
             accepted_food_types::text[] AS "acceptedFoodTypes",
+            other_partner_type AS "otherPartnerType", other_food_type AS "otherFoodType",
             pg_typeof(location)::text AS "locationType",
             ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude
      FROM partner_profiles WHERE user_id = $1`,

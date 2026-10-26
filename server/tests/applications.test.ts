@@ -226,6 +226,8 @@ describe('FR-ACC-03 partner application', () => {
         partnerType: role,
         address: '5 Nile Corniche, Giza',
         acceptedFoodTypes: ['bread_and_baked_goods', 'cooked_meals'],
+        otherPartnerType: null,
+        otherFoodType: null,
         locationType: 'geography',
         latitude: 30.0131,
         longitude: 31.2089,
@@ -243,6 +245,75 @@ describe('FR-ACC-03 partner application', () => {
 
     const profile = await readPartnerProfile((response.body as { id: string }).id);
     expect(profile?.acceptedFoodTypes).toEqual(['cooked_meals']);
+  });
+});
+
+describe('FR-ACC-03 D-31 Other partner type and Other food type', () => {
+  test('FR-ACC-03 an Other partner is saved as Pending with role other and the written type', async () => {
+    const response = await partner({ otherPartnerType: '  Mosque food committee ' }, 'other');
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ role: 'other', status: 'Pending' });
+    const user = await findUserByEmail('org@example.com');
+    expect(user?.role).toBe('other');
+    const profile = await readPartnerProfile((response.body as { id: string }).id);
+    expect(profile).toMatchObject({ partnerType: 'other', otherPartnerType: 'Mosque food committee' });
+  });
+
+  test('FR-ACC-03 Other food type is stored as written text beside the chosen categories', async () => {
+    const response = await partner({
+      acceptedFoodTypes: ['cooked_meals', 'other'],
+      otherFoodType: ' Animal feed ',
+    });
+
+    expect(response.status).toBe(201);
+    const profile = await readPartnerProfile((response.body as { id: string }).id);
+    expect(profile).toMatchObject({ acceptedFoodTypes: ['cooked_meals'], otherFoodType: 'Animal feed' });
+  });
+
+  test('FR-ACC-03 Other alone is enough as the accepted food type', async () => {
+    const response = await partner({ acceptedFoodTypes: ['other'], otherFoodType: 'Spices' });
+
+    expect(response.status).toBe(201);
+    const profile = await readPartnerProfile((response.body as { id: string }).id);
+    expect(profile).toMatchObject({ acceptedFoodTypes: [], otherFoodType: 'Spices' });
+  });
+
+  test('FR-ACC-03 the Other texts are ignored when Other is not chosen', async () => {
+    const response = await partner({ otherPartnerType: 'x', otherFoodType: 'y' }, 'charity');
+
+    const profile = await readPartnerProfile((response.body as { id: string }).id);
+    expect(profile).toMatchObject({ otherPartnerType: null, otherFoodType: null });
+  });
+
+  test.each([undefined, '', '   ', 'a'.repeat(81), 5])(
+    'E-ACC-02 an Other partner type of %p is rejected',
+    async (otherPartnerType) => {
+      const response = await partner({ otherPartnerType }, 'other');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'E-ACC-02', fields: ['otherPartnerType'] });
+      expect(await countUsers()).toBe(0);
+    },
+  );
+
+  test.each([undefined, '', 'a'.repeat(81)])(
+    'E-ACC-02 an Other food type of %p is rejected',
+    async (otherFoodType) => {
+      const response = await partner({ acceptedFoodTypes: ['other'], otherFoodType });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'E-ACC-02', fields: ['otherFoodType'] });
+    },
+  );
+
+  test('E-ACC-02 Other texts of 80 characters are accepted', async () => {
+    const response = await partner(
+      { otherPartnerType: 'a'.repeat(80), acceptedFoodTypes: ['other'], otherFoodType: 'b'.repeat(80) },
+      'other',
+    );
+
+    expect(response.status).toBe(201);
   });
 });
 

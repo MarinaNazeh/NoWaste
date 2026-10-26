@@ -38,8 +38,8 @@ export type RegistrationValidation =
 
 export declare function validateRegistration(input: RegistrationInput): RegistrationValidation;
 
-export type SignUpRole = 'consumer' | 'vendor' | 'charity' | 'composting';
-export type PartnerRole = 'charity' | 'composting';
+export type SignUpRole = 'consumer' | 'vendor' | 'charity' | 'composting' | 'other';
+export type PartnerRole = 'charity' | 'composting' | 'other';
 export type VendorType = 'formal' | 'informal';
 export type FoodCategory =
   | 'bread_and_baked_goods'
@@ -53,6 +53,10 @@ export declare const SIGN_UP_ROLES: readonly SignUpRole[];
 export declare const PARTNER_ROLES: readonly PartnerRole[];
 export declare const VENDOR_TYPES: readonly VendorType[];
 export declare const FOOD_CATEGORIES: readonly FoodCategory[];
+/** A food type a partner accepts: one of the six categories, or Other with a written food type (D-31). */
+export type AcceptedFoodType = FoodCategory | 'other';
+export declare const OTHER_FOOD_TYPE: 'other';
+export declare const ACCEPTED_FOOD_TYPES: readonly AcceptedFoodType[];
 export declare const TEXT_LIMITS: Readonly<{ name: number; address: number; description: number }>;
 
 export type ProfileField =
@@ -65,6 +69,8 @@ export type ProfileField =
   | 'longitude'
   | 'contact'
   | 'acceptedFoodTypes'
+  | 'otherPartnerType'
+  | 'otherFoodType'
   | 'description';
 export type SignUpField = RegistrationField | ProfileField;
 
@@ -91,13 +97,25 @@ export interface PartnerProfile {
   address: string;
   latitude: number;
   longitude: number;
+  /** The six categories, plus 'other' when the partner writes an Other food type (D-31). */
+  acceptedFoodTypes: AcceptedFoodType[];
+  /** Required when the role is other; validateSignUp returns null for other roles. */
+  otherPartnerType?: string | null;
+  /** Required when 'other' is among the sent food types; validateSignUp returns null otherwise. */
+  otherFoodType?: string | null;
+}
+
+/** A partner profile as validateSignUp returns it: categories only, Other food as written text. */
+export interface ValidPartnerProfile extends Omit<PartnerProfile, 'acceptedFoodTypes'> {
   acceptedFoodTypes: FoodCategory[];
+  otherPartnerType: string | null;
+  otherFoodType: string | null;
 }
 
 export interface ValidSignUp extends ValidRegistration {
   role: SignUpRole;
   vendorProfile: VendorProfile | null;
-  partnerProfile: PartnerProfile | null;
+  partnerProfile: ValidPartnerProfile | null;
 }
 
 export type SignUpValidation = { ok: true; value: ValidSignUp } | { ok: false; fields: SignUpField[] };

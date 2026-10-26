@@ -99,8 +99,9 @@ function validateRegistration(input) {
 }
 
 // Roles that can sign up in the app (US-01, US-02, US-03). Administrator accounts are created by the team (SRS 2.7).
-const SIGN_UP_ROLES = Object.freeze(['consumer', 'vendor', 'charity', 'composting']);
-const PARTNER_ROLES = Object.freeze(['charity', 'composting']);
+// D-31: an Other partner (role other) writes what kind of organisation it is.
+const SIGN_UP_ROLES = Object.freeze(['consumer', 'vendor', 'charity', 'composting', 'other']);
+const PARTNER_ROLES = Object.freeze(['charity', 'composting', 'other']);
 const VENDOR_TYPES = Object.freeze(['formal', 'informal']);
 
 // The six food categories of SRS Appendix A. The database enum food_category holds the same values in the same
@@ -117,6 +118,10 @@ const FOOD_CATEGORIES = Object.freeze([
 // Maximum lengths in characters after trimming: decision D-29 in PROGRESS.md (closes open question 35; like the
 // password rule, kept here so the app and the server apply the same limit, see open question 15).
 const TEXT_LIMITS = Object.freeze({ name: 80, address: 200, description: 300 });
+
+// D-31: a partner may also tick Other and write the food type; it is stored as text, not as a category.
+const OTHER_FOOD_TYPE = 'other';
+const ACCEPTED_FOOD_TYPES = Object.freeze([...FOOD_CATEGORIES, OTHER_FOOD_TYPE]);
 
 function isNumberBetween(value, min, max) {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
@@ -150,13 +155,20 @@ function checkVendorProfile(profile, fields) {
   if (!isValidOptionalText(profile.description, TEXT_LIMITS.description)) fields.push('description');
 }
 
-/** FR-ACC-03: organisation name, location and one or more of the six food categories. */
-function checkPartnerProfile(profile, fields) {
+/**
+ * FR-ACC-03: organisation name, location and one or more food types (the six categories or Other). D-31: an Other
+ * partner writes its type, and ticking Other food asks for the written food type, each up to the name limit.
+ */
+function checkPartnerProfile(profile, role, fields) {
   if (!isFilledText(profile.organisationName, TEXT_LIMITS.name)) fields.push('organisationName');
+  if (role === 'other' && !isFilledText(profile.otherPartnerType, TEXT_LIMITS.name))
+    fields.push('otherPartnerType');
   checkLocation(profile, fields);
   const types = profile.acceptedFoodTypes;
-  if (!Array.isArray(types) || types.length === 0 || !types.every((t) => FOOD_CATEGORIES.includes(t))) {
+  if (!Array.isArray(types) || types.length === 0 || !types.every((t) => ACCEPTED_FOOD_TYPES.includes(t))) {
     fields.push('acceptedFoodTypes');
+  } else if (types.includes(OTHER_FOOD_TYPE) && !isFilledText(profile.otherFoodType, TEXT_LIMITS.name)) {
+    fields.push('otherFoodType');
   }
 }
 
@@ -179,7 +191,7 @@ function validateSignUp(input) {
   } else if (role === 'vendor') {
     checkVendorProfile(asObject(input.vendorProfile), fields);
   } else if (PARTNER_ROLES.includes(role)) {
-    checkPartnerProfile(asObject(input.partnerProfile), fields);
+    checkPartnerProfile(asObject(input.partnerProfile), role, fields);
   }
 
   if (fields.length > 0 || !account.ok) {
@@ -207,6 +219,9 @@ function validateSignUp(input) {
       longitude: p.longitude,
       // Stored once each, in the order of SRS Appendix A.
       acceptedFoodTypes: FOOD_CATEGORIES.filter((c) => p.acceptedFoodTypes.includes(c)),
+      // Kept only when Other is chosen.
+      otherPartnerType: role === 'other' ? p.otherPartnerType.trim() : null,
+      otherFoodType: p.acceptedFoodTypes.includes(OTHER_FOOD_TYPE) ? p.otherFoodType.trim() : null,
     };
   }
   return { ok: true, value };
@@ -219,6 +234,8 @@ module.exports = {
   PARTNER_ROLES,
   VENDOR_TYPES,
   FOOD_CATEGORIES,
+  OTHER_FOOD_TYPE,
+  ACCEPTED_FOOD_TYPES,
   TEXT_LIMITS,
   checkPasswordRules,
   isValidPassword,

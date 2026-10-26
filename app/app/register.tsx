@@ -2,7 +2,8 @@
 // anything else opens the consumer form), so this screen shows only that role's form:
 // - consumer (US-01): email address or mobile number and a password (FR-ACC-01);
 // - vendor (US-02): shop name, formal or informal, contact, map pin and written address (FR-ACC-02);
-// - partner (US-03): Charity or Composting, organisation name, map pin and address, accepted food types (FR-ACC-03).
+// - partner (US-03): Charity, Composting or Other, organisation name, map pin and address, accepted food types
+//   (FR-ACC-03). D-31: Other partner and the Other food type each ask the partner to write what it is.
 // Vendors and partners also choose their login details with the US-01 rules. Invalid fields are marked (E-ACC-02,
 // IF-UI-06); an already registered email or phone offers Log in and Reset password (E-ACC-01). The same shared
 // validators run here and on the server.
@@ -11,11 +12,13 @@ import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  FOOD_CATEGORIES,
+  ACCEPTED_FOOD_TYPES,
+  OTHER_FOOD_TYPE,
+  PARTNER_ROLES,
   TEXT_LIMITS,
+  type AcceptedFoodType,
   validateRegistration,
   validateSignUp,
-  type FoodCategory,
   type PartnerRole,
   type SignUpField,
   type VendorType,
@@ -33,8 +36,6 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { TextField } from '@/components/TextField';
 import { useLanguage } from '@/i18n/LanguageProvider';
 import { spacing } from '@/theme';
-
-const PARTNER_TYPES: readonly PartnerRole[] = ['charity', 'composting'];
 
 type Method = 'email' | 'phone';
 type Problem = 'unreachable' | 'unexpected';
@@ -63,12 +64,15 @@ export default function RegisterScreen() {
   const [contact, setContact] = useState('');
   const [description, setDescription] = useState('');
   const [organisationName, setOrganisationName] = useState('');
-  const [foodTypes, setFoodTypes] = useState<FoodCategory[]>([]);
+  const [otherPartnerType, setOtherPartnerType] = useState('');
+  const [foodTypes, setFoodTypes] = useState<AcceptedFoodType[]>([]);
+  const [otherFoodType, setOtherFoodType] = useState('');
   const [pin, setPin] = useState<Coordinates | null>(null);
   const [address, setAddress] = useState('');
 
   const isConsumer = form === 'consumer';
   const isPartner = form === 'partner';
+  const acceptsOtherFood = foodTypes.includes(OTHER_FOOD_TYPE);
 
   function clearField(...cleared: SignUpField[]) {
     setInvalid((fields) => fields.filter((f) => !cleared.includes(f)));
@@ -138,8 +142,11 @@ export default function RegisterScreen() {
       partnerProfile: {
         organisationName,
         ...where,
-        // Sent in the order of SRS Appendix A.
-        acceptedFoodTypes: FOOD_CATEGORIES.filter((category) => foodTypes.includes(category)),
+        // Sent in the order of SRS Appendix A, with Other last.
+        acceptedFoodTypes: ACCEPTED_FOOD_TYPES.filter((type) => foodTypes.includes(type)),
+        // The written texts are sent only when Other is chosen.
+        ...(partnerType === 'other' ? { otherPartnerType } : {}),
+        ...(acceptsOtherFood ? { otherFoodType } : {}),
       },
     };
   }
@@ -327,7 +334,7 @@ export default function RegisterScreen() {
         <OptionList<PartnerRole>
           testID="partner-types"
           label={t('partner.typeLabel')}
-          options={PARTNER_TYPES.map((type) => ({
+          options={PARTNER_ROLES.map((type) => ({
             value: type,
             label: t(`accountTypes.${type}`),
             description: t(`accountTypes.${type}Description`),
@@ -338,6 +345,26 @@ export default function RegisterScreen() {
             clearField('role');
           }}
           error={errorFor('role', 'errors.partnerTypeRequired')}
+        />
+      ) : null}
+
+      {isPartner && partnerType === 'other' ? (
+        <TextField
+          testID="register-other-partner-type"
+          label={t('partner.otherTypeLabel')}
+          placeholder={t('partner.otherTypePlaceholder')}
+          value={otherPartnerType}
+          onChangeText={(text) => {
+            setOtherPartnerType(text);
+            clearField('otherPartnerType');
+          }}
+          error={textError(
+            'otherPartnerType',
+            otherPartnerType,
+            'errors.otherPartnerTypeRequired',
+            'errors.otherPartnerTypeTooLong',
+            TEXT_LIMITS.name,
+          )}
         />
       ) : null}
 
@@ -389,22 +416,42 @@ export default function RegisterScreen() {
       ) : null}
 
       {isPartner ? (
-        <OptionList<FoodCategory>
+        <OptionList<AcceptedFoodType>
           testID="food-types"
           multiple
           label={t('partner.foodTypesLabel')}
-          options={FOOD_CATEGORIES.map((category) => ({
-            value: category,
-            label: t(`foodCategories.${category}`),
+          options={ACCEPTED_FOOD_TYPES.map((type) => ({
+            value: type,
+            label: t(`foodCategories.${type}`),
           }))}
           selected={foodTypes}
-          onToggle={(category) => {
+          onToggle={(type) => {
             setFoodTypes((chosen) =>
-              chosen.includes(category) ? chosen.filter((c) => c !== category) : [...chosen, category],
+              chosen.includes(type) ? chosen.filter((c) => c !== type) : [...chosen, type],
             );
-            clearField('acceptedFoodTypes');
+            clearField('acceptedFoodTypes', 'otherFoodType');
           }}
           error={errorFor('acceptedFoodTypes', 'errors.foodTypesRequired')}
+        />
+      ) : null}
+
+      {isPartner && acceptsOtherFood ? (
+        <TextField
+          testID="register-other-food-type"
+          label={t('partner.otherFoodTypeLabel')}
+          placeholder={t('partner.otherFoodTypePlaceholder')}
+          value={otherFoodType}
+          onChangeText={(text) => {
+            setOtherFoodType(text);
+            clearField('otherFoodType');
+          }}
+          error={textError(
+            'otherFoodType',
+            otherFoodType,
+            'errors.otherFoodTypeRequired',
+            'errors.otherFoodTypeTooLong',
+            TEXT_LIMITS.name,
+          )}
         />
       ) : null}
 

@@ -22,6 +22,8 @@ export interface NewPartnerProfile extends MapPin {
   organisationName: string;
   partnerType: PartnerRole;
   acceptedFoodTypes: FoodCategory[];
+  otherPartnerType?: string | null;
+  otherFoodType?: string | null;
 }
 
 // ST_MakePoint takes longitude first.
@@ -37,9 +39,20 @@ async function insertVendorProfile(client: PoolClient, userId: string, p: NewVen
 
 async function insertPartnerProfile(client: PoolClient, userId: string, p: NewPartnerProfile): Promise<void> {
   await client.query(
-    `INSERT INTO partner_profiles (user_id, organisation_name, partner_type, accepted_food_types, address, location)
-     VALUES ($1, $2, $3, $4::food_category[], $5, ${point('$6', '$7')})`,
-    [userId, p.organisationName, p.partnerType, p.acceptedFoodTypes, p.address, p.longitude, p.latitude],
+    `INSERT INTO partner_profiles (user_id, organisation_name, partner_type, accepted_food_types, address, location,
+                                   other_partner_type, other_food_type)
+     VALUES ($1, $2, $3, $4::food_category[], $5, ${point('$6', '$7')}, $8, $9)`,
+    [
+      userId,
+      p.organisationName,
+      p.partnerType,
+      p.acceptedFoodTypes,
+      p.address,
+      p.longitude,
+      p.latitude,
+      p.otherPartnerType ?? null,
+      p.otherFoodType ?? null,
+    ],
   );
 }
 

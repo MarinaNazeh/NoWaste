@@ -16,6 +16,8 @@ jest.mock('@/api/client', () => ({
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
+  geocodeAsync: jest.fn(),
+  reverseGeocodeAsync: jest.fn(),
   Accuracy: { Balanced: 3 },
 }));
 
@@ -23,6 +25,8 @@ const mockedSubmit = jest.mocked(submitApplication);
 const mockedConsumer = jest.mocked(registerConsumer);
 const mockedPermission = jest.mocked(Location.requestForegroundPermissionsAsync);
 const mockedPosition = jest.mocked(Location.getCurrentPositionAsync);
+const mockedGeocode = jest.mocked(Location.geocodeAsync);
+const mockedReverse = jest.mocked(Location.reverseGeocodeAsync);
 
 function grantLocation(latitude = 30.0381, longitude = 31.2122) {
   mockedPermission.mockResolvedValue({ status: 'granted' } as Location.LocationPermissionResponse);
@@ -39,11 +43,15 @@ beforeEach(async () => {
   mockedConsumer.mockReset();
   mockedPermission.mockReset();
   mockedPosition.mockReset();
+  mockedGeocode.mockReset().mockResolvedValue([]);
+  mockedReverse.mockReset().mockResolvedValue([]);
 });
 
 // The role is chosen on the Welcome screen (D-30, tested in welcome.test.tsx) and passed to Register as ?role=.
 // Partners then choose Charity or Composting on the Register screen.
-async function openRegisterAs(accountType: 'Vendor' | 'Charity partner' | 'Composting partner') {
+async function openRegisterAs(
+  accountType: 'Vendor' | 'Charity partner' | 'Composting partner' | 'Other partner',
+) {
   const result = await renderApp(
     accountType === 'Vendor' ? '/register?role=vendor' : '/register?role=partner',
   );
@@ -86,7 +94,7 @@ describe('FR-ACC-02 FR-ACC-03 the account type choice shows the right form', () 
     await fillAccount();
     await submit();
 
-    expect(screen.getByText('Choose Charity partner or Composting partner.')).toBeTruthy();
+    expect(screen.getByText('Choose Charity partner, Composting partner or Other partner.')).toBeTruthy();
     expect(mockedSubmit).not.toHaveBeenCalled();
   });
 
@@ -371,6 +379,68 @@ describe('IF-HW-04 location permission denied', () => {
   });
 });
 
+describe('FR-ACC-02 IF-HW-03 written address and pin stay in step', () => {
+  function geocoded(fields: Partial<Location.LocationGeocodedAddress>) {
+    return [fields as Location.LocationGeocodedAddress];
+  }
+
+  test('FR-ACC-02 IF-HW-03 the address of the GPS position is written into the address field', async () => {
+    grantLocation(30.0381, 31.2122);
+    mockedReverse.mockResolvedValue(
+      geocoded({ streetNumber: '12', street: 'Tahrir Street', district: 'Dokki', city: 'Giza' }),
+    );
+    await openRegisterAs('Vendor');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Written address')).toHaveDisplayValue('12 Tahrir Street, Dokki, Giza');
+    });
+    expect(mockedReverse).toHaveBeenCalledWith({ latitude: 30.0381, longitude: 31.2122 });
+    expect(screen.getByText(/filled in from the pin/)).toBeTruthy();
+  });
+
+  test('FR-ACC-02 IF-HW-03 a typed address moves the pin to that place', async () => {
+    denyLocation();
+    mockedGeocode.mockResolvedValue([{ latitude: 30.0626, longitude: 31.2497 }]);
+    await openRegisterAs('Vendor');
+    await screen.findByText('No pin placed yet');
+
+    const field = screen.getByLabelText('Written address');
+    await fireEvent.changeText(field, '5 Talaat Harb, Downtown Cairo');
+    await fireEvent(field, 'submitEditing');
+
+    expect(await screen.findByText('Pin: 30.06260, 31.24970')).toBeTruthy();
+    expect(mockedGeocode).toHaveBeenCalledWith('5 Talaat Harb, Downtown Cairo');
+    expect(field).toHaveDisplayValue('5 Talaat Harb, Downtown Cairo');
+  });
+
+  test('FR-ACC-02 an address that cannot be found keeps the pin and says so', async () => {
+    grantLocation(30.0381, 31.2122);
+    await openRegisterAs('Vendor');
+    await screen.findByText('Pin: 30.03810, 31.21220');
+
+    const field = screen.getByLabelText('Written address');
+    await fireEvent.changeText(field, 'nowhere at all');
+    await fireEvent(field, 'blur');
+
+    expect(await screen.findByText(/could not find this address on the map/)).toBeTruthy();
+    expect(screen.getByText('Pin: 30.03810, 31.21220')).toBeTruthy();
+  });
+
+  test('FR-ACC-02 moving the pin by hand writes the address of the new spot', async () => {
+    denyLocation();
+    mockedReverse.mockResolvedValue(geocoded({ formattedAddress: '26 July Street, Zamalek, Cairo' }));
+    await openRegisterAs('Charity partner');
+    await screen.findByText(/needs your location/);
+
+    await fireEvent.press(screen.getByTestId('map-view'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Written address')).toHaveDisplayValue('26 July Street, Zamalek, Cairo');
+    });
+    expect(mockedReverse).toHaveBeenCalledWith({ latitude: 30.05, longitude: 31.25 });
+  });
+});
+
 describe('FR-ACC-03 partner application on the app', () => {
   async function fillPartner() {
     await screen.findByText('Pin: 30.03810, 31.21220');
@@ -433,6 +503,130 @@ describe('FR-ACC-03 partner application on the app', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Dairy and eggs' })).not.toBeChecked();
     expect(screen.getByText('Choose at least one food type.')).toBeTruthy();
+  });
+});
+
+describe('FR-ACC-03 D-31 Other partner type and Other food type on the app', () => {
+  async function fillPartner() {
+    await screen.findByText('Pin: 30.03810, 31.21220');
+    await fireEvent.changeText(screen.getByLabelText('Organisation name'), 'Giza Food Bank');
+    await fireEvent.changeText(screen.getByLabelText('Written address'), 'Nile Corniche, Giza');
+    await fillAccount();
+  }
+
+  test('FR-ACC-03 the written type and food fields appear only when Other is chosen', async () => {
+    grantLocation();
+    await openRegisterAs('Charity partner');
+
+    expect(screen.queryByLabelText('Your type of partner')).toBeNull();
+    expect(screen.queryByLabelText('Other food type')).toBeNull();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Other partner' }));
+    expect(screen.getByLabelText('Your type of partner')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Other' }));
+    expect(screen.getByLabelText('Other food type')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Other' }));
+    expect(screen.queryByLabelText('Other food type')).toBeNull();
+  });
+
+  test('FR-ACC-03 an Other partner with an Other food type is sent with both written texts', async () => {
+    grantLocation();
+    mockedSubmit.mockResolvedValue({ kind: 'created', id: 'p9', status: 'Pending' });
+    await openRegisterAs('Other partner');
+    await fillPartner();
+    await fireEvent.changeText(screen.getByLabelText('Your type of partner'), 'Mosque food committee');
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Cooked meals' }));
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Other' }));
+    await fireEvent.changeText(screen.getByLabelText('Other food type'), 'Animal feed');
+    await submit();
+
+    expect(await screen.findByTestId('applied-title')).toBeTruthy();
+    expect(mockedSubmit.mock.calls[0]?.[0]).toMatchObject({
+      role: 'other',
+      partnerProfile: {
+        otherPartnerType: 'Mosque food committee',
+        acceptedFoodTypes: ['cooked_meals', 'other'],
+        otherFoodType: 'Animal feed',
+      },
+    });
+  });
+
+  test('E-ACC-02 an empty Other partner type is marked and nothing is sent', async () => {
+    grantLocation();
+    await openRegisterAs('Other partner');
+    await fillPartner();
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Cooked meals' }));
+    await submit();
+
+    expect(screen.getByText('Write what type of partner you are.')).toBeTruthy();
+    expect(mockedSubmit).not.toHaveBeenCalled();
+  });
+
+  test('E-ACC-02 an empty or too long Other food type is marked and nothing is sent', async () => {
+    grantLocation();
+    await openRegisterAs('Charity partner');
+    await fillPartner();
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Other' }));
+    await submit();
+    expect(screen.getByText('Write the other food type you accept.')).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByLabelText('Other food type'), 'a'.repeat(81));
+    await submit();
+    expect(screen.getByText('Keep the other food type to 80 characters or fewer.')).toBeTruthy();
+    expect(mockedSubmit).not.toHaveBeenCalled();
+  });
+
+  test('NFR-06 the Other options are in Arabic', async () => {
+    await AsyncStorage.setItem('nowaste.language', 'ar');
+    grantLocation();
+    await renderApp('/register?role=partner');
+    await screen.findByText('الموقع');
+
+    await fireEvent.press(screen.getByRole('radio', { name: 'شريك آخر' }));
+    expect(screen.getByLabelText('نوع الشريك لديكم')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'أخرى' }));
+    expect(screen.getByLabelText('نوع طعام آخر')).toBeTruthy();
+  });
+});
+
+describe('IF-HW-03 detect my location again', () => {
+  test('IF-HW-03 after moving the pin, Use my current location puts it back at the device position', async () => {
+    grantLocation(30.0381, 31.2122);
+    mockedReverse.mockResolvedValue([
+      { formattedAddress: '12 Tahrir Street, Dokki, Giza' } as Location.LocationGeocodedAddress,
+    ]);
+    await openRegisterAs('Vendor');
+    await screen.findByText('Pin: 30.03810, 31.21220');
+    await fireEvent.press(screen.getByTestId('map-view'));
+    expect(screen.getByText('Pin: 30.05000, 31.25000')).toBeTruthy();
+
+    mockedPosition.mockResolvedValue({
+      coords: { latitude: 30.04, longitude: 31.22 },
+    } as Location.LocationObject);
+    mockedReverse.mockResolvedValue([
+      { formattedAddress: 'New spot, Giza' } as Location.LocationGeocodedAddress,
+    ]);
+    await fireEvent.press(screen.getByRole('button', { name: 'Use my current location' }));
+
+    expect(await screen.findByText('Pin: 30.04000, 31.22000')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Written address')).toHaveDisplayValue('New spot, Giza');
+    });
+    expect(mockedPermission).toHaveBeenCalledTimes(2);
+  });
+
+  test('IF-HW-04 Use my current location explains the problem when permission is denied', async () => {
+    denyLocation();
+    await openRegisterAs('Vendor');
+    await screen.findByText(/needs your location/);
+    await fireEvent.press(screen.getByTestId('map-view'));
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Use my current location' }));
+
+    await waitFor(() => {
+      expect(mockedPermission).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByText(/needs your location/)).toBeTruthy();
+    expect(screen.getByText('Pin: 30.05000, 31.25000')).toBeTruthy();
   });
 });
 

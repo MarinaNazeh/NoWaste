@@ -87,7 +87,11 @@
     "organisationTooLong": "يجب ألا يزيد اسم الجهة عن {{max}} حرفًا.",
     "addressTooLong": "يجب ألا يزيد العنوان عن {{max}} حرفًا.",
     "descriptionTooLong": "يجب ألا يزيد الوصف عن {{max}} حرفًا.",
-    "partnerTypeRequired": "اختر شريك خيري أو شريك تسميد."
+    "partnerTypeRequired": "اختر شريك خيري أو شريك تسميد أو شريك آخر.",
+    "otherPartnerTypeRequired": "اكتب نوع الشريك لديكم.",
+    "otherPartnerTypeTooLong": "يجب ألا يزيد نوع الشريك عن {{max}} حرفًا.",
+    "otherFoodTypeRequired": "اكتب نوع الطعام الآخر الذي تقبلونه.",
+    "otherFoodTypeTooLong": "يجب ألا يزيد نوع الطعام الآخر عن {{max}} حرفًا."
   },
   "duplicate": {
     "emailTitle": "هذا البريد الإلكتروني مسجّل بالفعل",
@@ -108,7 +112,9 @@
     "charity": "شريك خيري",
     "charityDescription": "جمعية خيرية تستلم الطعام المتبرع به",
     "composting": "شريك تسميد",
-    "compostingDescription": "جهة تحوّل الطعام غير الصالح للبشر إلى سماد"
+    "compostingDescription": "جهة تحوّل الطعام غير الصالح للبشر إلى سماد",
+    "other": "شريك آخر",
+    "otherDescription": "جهة من نوع آخر تستلم الطعام"
   },
   "vendor": {
     "shopNameLabel": "اسم المحل",
@@ -128,7 +134,11 @@
     "organisationLabel": "اسم الجهة",
     "organisationPlaceholder": "مثال: بنك الطعام بالجيزة",
     "foodTypesLabel": "أنواع الطعام التي تقبلونها",
-    "typeLabel": "نوع الشريك"
+    "typeLabel": "نوع الشريك",
+    "otherTypeLabel": "نوع الشريك لديكم",
+    "otherTypePlaceholder": "مثال: لجنة الطعام بالمسجد",
+    "otherFoodTypeLabel": "نوع طعام آخر",
+    "otherFoodTypePlaceholder": "مثال: علف حيوانات"
   },
   "foodCategories": {
     "bread_and_baked_goods": "خبز ومخبوزات",
@@ -136,7 +146,8 @@
     "fruit_and_vegetables": "فواكه وخضروات",
     "dairy_and_eggs": "ألبان وبيض",
     "meat_poultry_and_fish": "لحوم ودواجن وأسماك",
-    "packaged_and_dry_food": "أطعمة معلبة وجافة"
+    "packaged_and_dry_food": "أطعمة معلبة وجافة",
+    "other": "أخرى"
   },
   "location": {
     "title": "الموقع",
@@ -146,7 +157,12 @@
     "noPin": "لم يتم وضع الدبوس بعد",
     "pinAt": "الدبوس: {{latitude}}، {{longitude}}",
     "addressLabel": "العنوان المكتوب",
-    "addressPlaceholder": "الشارع والمبنى والمنطقة"
+    "addressPlaceholder": "الشارع والمبنى والمنطقة",
+    "addressFromPin": "تمت كتابة العنوان من موقع الدبوس. راجعه وصححه إذا لزم الأمر.",
+    "addressNotFound": "لم نتمكن من العثور على هذا العنوان على الخريطة. ضع الدبوس يدويًا: اضغط على الخريطة ثم اسحب الدبوس إلى المكان الدقيق.",
+    "detect": "استخدم موقعي الحالي",
+    "detecting": "جارٍ تحديد موقعك…",
+    "detectHint": "يعيد الدبوس إلى مكان هاتفك الآن"
   },
   "applied": {
     "title": "تم إرسال الطلب",
