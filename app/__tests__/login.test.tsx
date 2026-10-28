@@ -6,7 +6,7 @@ import { fireEvent, screen, waitFor } from 'expo-router/testing-library';
 import { getMe, login, logout, updateMyLanguage, type SessionUser } from '@/api/client';
 import { TOKEN_KEY } from '@/auth/tokenStorage';
 import { renderApp } from './helpers/renderApp';
-import { headerDirections } from './helpers/headerDirection';
+import { headerDirections, headerSlotContents } from './helpers/headerDirection';
 
 jest.mock('@/api/client', () => ({
   isServerHealthy: jest.fn().mockResolvedValue(true),
@@ -92,16 +92,63 @@ describe('FR-ACC-04 logging in on the app', () => {
     expect(await screen.findByTestId(testID)).toBeOnTheScreen();
   });
 
-  test('FR-ACC-09 after login the app switches to the language saved on the account', async () => {
-    mockedLogin.mockResolvedValue({ kind: 'ok', token: 't', user: user({ language: 'ar' }) });
+  // Decision D-39 (2026-10-28): logging in keeps the language the user is using and saves it on the account. This
+  // replaces the earlier rule "after login the app switches to the language saved on the account".
+  test('FR-ACC-09 logging in while the app is in Arabic keeps Arabic and saves it on an English account', async () => {
+    await AsyncStorage.setItem('nowaste.language', 'ar');
+    mockedLogin.mockResolvedValue({ kind: 'ok', token: 't-ar', user: user({ language: 'en' }) });
+    await renderApp('/login');
+    await fireEvent.changeText(
+      await screen.findByLabelText('البريد الإلكتروني أو رقم المحمول'),
+      'mona@example.com',
+    );
+    await fireEvent.changeText(screen.getByLabelText('كلمة المرور'), 'abcd1234');
+    await fireEvent.press(screen.getByRole('button', { name: 'تسجيل الدخول' }));
+
+    expect(await screen.findByTestId('home-consumer')).toBeOnTheScreen();
+    expect(await AsyncStorage.getItem('nowaste.language')).toBe('ar');
+    expect(screen.getByRole('button', { name: 'العربية' })).toBeSelected();
+    await waitFor(() => {
+      expect(mockedUpdateLanguage).toHaveBeenCalledWith('t-ar', 'ar');
+    });
+  });
+
+  test('FR-ACC-09 logging in while the app is in English keeps English and saves it on an Arabic account', async () => {
+    mockedLogin.mockResolvedValue({ kind: 'ok', token: 't-en', user: user({ language: 'ar' }) });
     await openLogin();
 
     await logInWith('mona@example.com');
 
     expect(await screen.findByTestId('home-consumer')).toBeOnTheScreen();
-    expect(await AsyncStorage.getItem('nowaste.language')).toBe('ar');
-    expect(screen.getByTestId('home-consumer')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'English' })).toBeSelected();
+    expect(await AsyncStorage.getItem('nowaste.language')).not.toBe('ar');
+    await waitFor(() => {
+      expect(mockedUpdateLanguage).toHaveBeenCalledWith('t-en', 'en');
+    });
+  });
+
+  test('FR-ACC-09 logging in when the account already has the same language sends no update', async () => {
+    mockedLogin.mockResolvedValue({ kind: 'ok', token: 't-same', user: user({ language: 'en' }) });
+    await openLogin();
+
+    await logInWith('mona@example.com');
+
+    expect(await screen.findByTestId('home-consumer')).toBeOnTheScreen();
     expect(mockedUpdateLanguage).not.toHaveBeenCalled();
+  });
+
+  test('FR-ACC-09 reopening the app with a saved session keeps the language of the phone', async () => {
+    await AsyncStorage.setItem('nowaste.language', 'ar');
+    store.set(TOKEN_KEY, 'saved-ar');
+    mockedGetMe.mockResolvedValue({ kind: 'ok', user: user({ language: 'en' }) });
+
+    await renderApp('/');
+
+    expect(await screen.findByTestId('home-consumer')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'العربية' })).toBeSelected();
+    await waitFor(() => {
+      expect(mockedUpdateLanguage).toHaveBeenCalledWith('saved-ar', 'ar');
+    });
   });
 
   test('FR-ACC-09 switching the language while logged in saves it on the account', async () => {
@@ -279,5 +326,31 @@ describe('NFR-06 the Log in screen in Arabic', () => {
       'accessibilityHint',
       'Ends your session on this phone',
     );
+  });
+});
+
+describe('IF-UI-02 the header after logging in (decision D-42)', () => {
+  test('IF-UI-02 the home header starts with the logo and Log out beside it, and ends with the language switch', async () => {
+    mockedLogin.mockResolvedValue({ kind: 'ok', token: 't-header', user: user() });
+    await openLogin();
+    await logInWith('mona@example.com');
+    await screen.findByTestId('home-consumer');
+
+    const slots = headerSlotContents().filter(
+      (s) => s.items.includes('home-header-start') || s.items.includes('language-switch'),
+    );
+    const start = slots.find((s) => s.items.includes('home-header-start'));
+    const end = slots.find(
+      (s) => s.items.includes('language-switch') && !s.items.includes('home-header-start'),
+    );
+    // Start slot ("left" in English): the logo first, then Log out right beside it. No title text.
+    expect(start?.slot).toBe('left');
+    expect(start?.items.filter((i) => i === 'image:NoWaste logo' || i === 'header-logout')).toEqual([
+      'image:NoWaste logo',
+      'header-logout',
+    ]);
+    // End slot ("right" in English): only the language switch.
+    expect(end?.slot).toBe('right');
+    expect(end?.items).not.toContain('header-logout');
   });
 });

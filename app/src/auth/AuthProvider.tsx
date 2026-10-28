@@ -1,6 +1,7 @@
 // US-04: the login session for the whole app (FR-ACC-04, FR-ACC-09, IF-COM-03, E-ACC-06). The token lives in
-// expo-secure-store; on start a saved token is checked with GET /users/me. After login the app switches to the
-// language saved on the account, and a language chosen while logged in is saved on the account (PATCH /users/me).
+// expo-secure-store; on start a saved token is checked with GET /users/me.
+// Decision D-39: logging in never changes the language. The app keeps the language the user is using on the phone,
+// and the account is updated to it (PATCH /users/me) when it differs, as is any language chosen while logged in.
 import {
   createContext,
   useCallback,
@@ -44,9 +45,10 @@ interface State {
 const signedOut: State = { phase: 'ready', token: null, user: null, suspended: false };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { language, setLanguage } = useLanguage();
+  const { language } = useLanguage();
   const [state, setState] = useState<State>({ ...signedOut, phase: 'restoring' });
-  // The language the account has on the server (FR-ACC-09), so the switch made at login is not sent back.
+  // The language the account has on the server (FR-ACC-09). When the phone's language differs, the effect below
+  // saves the phone's language on the account.
   const accountLanguage = useRef<Language | null>(null);
 
   useEffect(() => {
@@ -61,7 +63,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       if (result.kind === 'ok') {
         accountLanguage.current = result.user.language;
-        await setLanguage(result.user.language);
         if (active) setState({ phase: 'ready', token, user: result.user, suspended: false });
       } else if (result.kind === 'suspended') {
         setState({ phase: 'ready', token, user: null, suspended: true });
@@ -76,10 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
     };
     // Restore once, when the app starts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // FR-ACC-09: a language switched while logged in is saved on the account.
+  // FR-ACC-09 (D-39): the phone's language is saved on the account after login, and whenever it is switched while
+  // logged in.
   const { token, user } = state;
   useEffect(() => {
     if (token === null || user === null || accountLanguage.current === language) return;
@@ -87,16 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void updateMyLanguage(token, language);
   }, [language, token, user]);
 
-  const signIn = useCallback(
-    async (nextToken: string, nextUser: SessionUser) => {
-      await saveToken(nextToken);
-      accountLanguage.current = nextUser.language;
-      // FR-ACC-09: switch to the account's language before showing the home screen.
-      await setLanguage(nextUser.language);
-      setState({ phase: 'ready', token: nextToken, user: nextUser, suspended: false });
-    },
-    [setLanguage],
-  );
+  const signIn = useCallback(async (nextToken: string, nextUser: SessionUser) => {
+    await saveToken(nextToken);
+    // D-39: keep the language the user is using; the effect above updates the account if it differs.
+    accountLanguage.current = nextUser.language;
+    setState({ phase: 'ready', token: nextToken, user: nextUser, suspended: false });
+  }, []);
 
   const sessionEnded = useCallback(async () => {
     await deleteToken();

@@ -120,7 +120,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl + spacing.lg,
     gap: spacing.lg,
   },
+  // D-38: the language switch stays in the top corner on the same side in both languages (not mirrored).
   topBar: {
+    direction: 'ltr',
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
