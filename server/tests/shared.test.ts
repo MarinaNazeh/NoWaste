@@ -6,6 +6,7 @@ import {
   isValidEmail,
   isValidPassword,
   normalizeEgyptianMobile,
+  validateCardInput,
   validateRegistration,
 } from '@nowaste/shared';
 
@@ -94,6 +95,45 @@ describe('E-ACC-02 validateRegistration lists every invalid field', () => {
     ).toEqual({
       ok: true,
       value: { email: 'Mona@Example.com', phone: '+201012345678', password: 'abcd1234', language: 'ar' },
+    });
+  });
+});
+
+// D-99 (Maryam, 2026-11-16): the card form of the pretend bank: an 8-digit number, the expiry as MM/YY and a 3-digit
+// CVV. Only the format is checked here; whether the card exists, is expired or has money is the bank's answer.
+describe('FR-RES-02 D-99 shared card format', () => {
+  test('FR-RES-02 a well-formed card is returned with the expiry taken apart', () => {
+    expect(validateCardInput({ number: ' 4000 0000 ', expiry: '12/30', cvv: '123' })).toEqual({
+      ok: true,
+      value: { number: '40000000', expiryMonth: 12, expiryYear: 2030, cvv: '123' },
+    });
+  });
+
+  test('FR-RES-02 digits typed on an Arabic keyboard are accepted', () => {
+    expect(validateCardInput({ number: '٤٠٠٠٠٠٠٠', expiry: '١٢/٣٠', cvv: '١٢٣' })).toMatchObject({
+      ok: true,
+      value: { number: '40000000', cvv: '123' },
+    });
+  });
+
+  test.each([
+    ['a 7-digit number', { number: '4000000' }, ['number']],
+    ['a 9-digit number', { number: '400000000' }, ['number']],
+    ['letters in the number', { number: '4000abcd' }, ['number']],
+    ['month 13', { expiry: '13/30' }, ['expiry']],
+    ['month 00', { expiry: '00/30' }, ['expiry']],
+    ['no slash', { expiry: '1230' }, ['expiry']],
+    ['a 2-digit CVV', { cvv: '12' }, ['cvv']],
+    ['a 4-digit CVV', { cvv: '1234' }, ['cvv']],
+    [
+      'everything missing',
+      { number: undefined, expiry: undefined, cvv: undefined },
+      ['number', 'expiry', 'cvv'],
+    ],
+  ])('E-RES-01 %s is refused', (_case, change, fields) => {
+    expect(validateCardInput({ number: '40000000', expiry: '12/30', cvv: '123', ...change })).toEqual({
+      ok: false,
+      fields,
     });
   });
 });

@@ -9,8 +9,9 @@ afterAll(async () => {
 
 const expected: Array<[string, unknown]> = [
   ['BR-01', { highly_perishable_max_hours: 6, short_life_max_hours: 48 }],
-  ['BR-02', { hold_minutes: 45 }],
-  ['BR-03', { check_ins_allowed: 1, extension_minutes: 20 }],
+  // BR-02 and BR-03 were changed from 45 and 20 minutes by decision D-89 (2026-11-14).
+  ['BR-02', { hold_minutes: 15 }],
+  ['BR-03', { check_ins_allowed: 1, extension_minutes: 10 }],
   ['BR-04', { min_minutes_remaining: 30 }],
   ['BR-05', { accept_minutes: 10 }],
   ['BR-06', { full_refund_within_minutes: 10 }],
@@ -29,6 +30,16 @@ describe('settings table (SRS 5.5 business rules)', () => {
     expect(row).toBeDefined();
     expect(row?.value).toEqual(value);
     expect(row?.source).toContain(`SRS 5.5 ${key}`);
+  });
+
+  test.each([
+    ['BR-02', 'No-card hold: 15 minutes'],
+    ['BR-03', '+10 minutes'],
+  ])('%s D-89 the settings row describes the shorter time', async (key, text) => {
+    const row = await getSetting(key);
+
+    expect(row?.description).toContain(text);
+    expect(row?.source).toContain('D-89');
   });
 
   test('TBD-5 settings row exists with value null until the team decides it', async () => {

@@ -35,6 +35,8 @@ export function Button({
 }: ButtonProps) {
   const inactive = disabled || busy;
   const shownLabel = busy && busyLabel !== undefined ? busyLabel : label;
+  // D-96: a disabled button (not a busy one) is grey, so it clearly cannot be pressed.
+  const greyed = disabled && !busy;
 
   return (
     <Pressable
@@ -50,14 +52,15 @@ export function Button({
         styles[variant],
         pressed && variant === 'primary' && styles.primaryPressed,
         pressed && variant !== 'primary' && styles.lightPressed,
-        inactive && styles.inactive,
+        busy && styles.inactive,
+        greyed && styles.disabled,
       ]}
     >
       <View style={styles.content}>
         {busy ? <ActivityIndicator color={colors[textColor[variant]]} /> : null}
         <AppText
           variant="label"
-          color={textColor[variant]}
+          color={greyed ? 'textMuted' : textColor[variant]}
           center
           style={variant === 'link' && styles.linkText}
         >
@@ -97,6 +100,10 @@ const styles = StyleSheet.create({
   },
   inactive: {
     opacity: 0.6,
+  },
+  disabled: {
+    backgroundColor: colors.disabled,
+    borderColor: colors.disabled,
   },
   content: {
     flexDirection: 'row',

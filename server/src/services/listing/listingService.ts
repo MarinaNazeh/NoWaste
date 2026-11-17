@@ -18,6 +18,8 @@ import { getStorage, type PhotoType } from '../../adapters/storage/storage.js';
 import { SrsError } from '../../domain/errors.js';
 import { clock } from '../../domain/clock.js';
 import { estimate, pickBy, type PerishabilityCategory } from '../../domain/perishability.js';
+import { NO_BAGS, countListingReservations, type BagCounts } from '../../data/reservationRepository.js';
+import { releaseExpiredHolds } from '../reservation/reservationService.js';
 import { getSetting } from '../../data/settingsRepository.js';
 import { openingPeriodFor } from '../../domain/openingHours.js';
 import { rulesFor } from '../perishability/thresholds.js';
@@ -52,6 +54,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** The listing as the API returns it. Unknown values are "unknown"; values never asked are null. */
 export interface ListingView {
   id: string;
+  /** FR-RES-09 (D-101, D-102): taken, collected, waiting and not collected; on My listings and the listing page. */
+  reservations?: BagCounts;
   status: ListingRecord['status'];
   listingType: ListingRecord['listingType'];
   isQuickPost: boolean;
@@ -515,15 +519,30 @@ export async function ownListing(vendorId: string, id: string): Promise<ListingR
 
 /** GET /listings/:id: only the vendor's own listing. */
 export async function getListing(vendorId: string, id: string): Promise<ListingView> {
-  return present(await ownListing(vendorId, id));
+  // D-93, D-102: ended holds are released and ended listings Closed before the listing is shown.
+  await releaseExpiredHolds();
+  const listing = await ownListing(vendorId, id);
+  const counts = await countListingReservations([listing.id], clock.now());
+  return { ...(await present(listing)), reservations: counts.get(listing.id) ?? NO_BAGS };
 }
 
 /**
- * GET /listings (US-15, FR-LST-06): the vendor's active and previous listings, newest first. Reservations are added
- * to this view when they exist (Sprint 2).
+ * GET /listings (US-15, FR-LST-06): the vendor's active and previous listings, newest first, each with its bag counts
+ * (FR-RES-09, D-101, D-102). Ended listings are Closed first.
  */
 export async function getMyListings(vendorId: string): Promise<ListingView[]> {
-  return Promise.all((await findVendorListings(vendorId)).map(present));
+  await releaseExpiredHolds();
+  const listings = await findVendorListings(vendorId);
+  const counts = await countListingReservations(
+    listings.map((listing) => listing.id),
+    clock.now(),
+  );
+  return Promise.all(
+    listings.map(async (listing) => ({
+      ...(await present(listing)),
+      reservations: counts.get(listing.id) ?? NO_BAGS,
+    })),
+  );
 }
 
 /** GET /listings/:id/photo: the photo of the vendor's own listing (C-26). */

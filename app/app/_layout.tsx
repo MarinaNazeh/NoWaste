@@ -71,6 +71,10 @@ function Navigator() {
           <Stack.Screen name="listings/index" options={{ title: t('myListings.title') }} />
           <Stack.Screen name="vendor/hours" options={{ title: t('openingHours.title') }} />
           <Stack.Screen name="offers/[id]" options={{ title: t('offers.detailsTitle') }} />
+          <Stack.Screen name="reservations/[id]" options={{ title: t('reservation.title') }} />
+          <Stack.Screen name="reservations/index" options={{ title: t('profile.active') }} />
+          <Stack.Screen name="profile" options={{ title: t('profile.edit') }} />
+          <Stack.Screen name="pay/[id]" options={{ title: t('payment.title') }} />
         </Stack>
         <StatusBar style="dark" />
       </View>

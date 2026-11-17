@@ -12,3 +12,12 @@ export function formatDateTime(iso: string, language: 'ar' | 'en'): string {
   });
   return localDigits(text, language);
 }
+
+/** D-97: a time of day only, for example "18:30" or "١٨:٣٠" (pickup slots). */
+export function formatTime(iso: string, language: 'ar' | 'en'): string {
+  const text = new Date(iso).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return localDigits(text, language);
+}

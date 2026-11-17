@@ -169,3 +169,89 @@ export async function clearOpeningHours(userId: string): Promise<void> {
     userId,
   ]);
 }
+
+/** US-28: a reservation row as stored. */
+export async function readReservationRow(id: string) {
+  const result = await getPool().query<Record<string, unknown>>('SELECT * FROM reservations WHERE id = $1', [
+    id,
+  ]);
+  return result.rows[0];
+}
+
+/** US-28: the no-shows recorded for a consumer (SDD 4.2 NoShow). */
+export async function readNoShows(consumerId: string) {
+  const result = await getPool().query<{ reservationId: string; source: string; method: string }>(
+    `SELECT reservation_id AS "reservationId", source, method FROM no_shows WHERE consumer_id = $1
+     ORDER BY created_at`,
+    [consumerId],
+  );
+  return result.rows;
+}
+
+/** US-28: the pickup code row of a reservation (SDD 4.2 PickupCode). */
+export async function readPickupCode(reservationId: string) {
+  const result = await getPool().query<{ code: string; status: string }>(
+    'SELECT code, status FROM pickup_codes WHERE reservation_id = $1',
+    [reservationId],
+  );
+  return result.rows[0];
+}
+
+/** D-99: the balance of a pretend-bank test card (mock_bank schema), found by its number's hash. */
+export async function readMockBankBalance(number: string): Promise<number | undefined> {
+  const result = await getPool().query<{ balance: number }>(
+    `SELECT balance::float8 AS balance FROM mock_bank.cards WHERE number_hash = encode(sha256($1::bytea), 'hex')`,
+    [number],
+  );
+  return result.rows[0]?.balance;
+}
+
+/** D-99: puts the pretend bank back as the migration seeded it (balances), and forgets tokens and charges. */
+export async function resetMockBank(): Promise<void> {
+  await getPool().query('DELETE FROM mock_bank.charges');
+  await getPool().query('DELETE FROM mock_bank.tokens');
+  await getPool().query('UPDATE mock_bank.cards SET balance = seeded_balance');
+}
+
+/** D-99: whether a text appears anywhere in the NoWaste reservation and payment tables (it must not, NFR-10). */
+export async function nowasteTablesContain(text: string): Promise<boolean> {
+  const result = await getPool().query<{ found: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM reservations r WHERE r::text LIKE '%' || $1 || '%')
+         OR EXISTS (SELECT 1 FROM payments p WHERE p::text LIKE '%' || $1 || '%') AS found`,
+    [text],
+  );
+  return result.rows[0]?.found ?? false;
+}
+
+/** D-99: the payments of a reservation (SDD 4.2 Payment). */
+export async function readPayments(reservationId: string) {
+  const result = await getPool().query<{ amount: number; status: string; gatewayReference: string }>(
+    `SELECT amount::float8 AS amount, status, gateway_reference AS "gatewayReference" FROM payments
+     WHERE reservation_id = $1`,
+    [reservationId],
+  );
+  return result.rows;
+}
+
+export async function countReservations(listingId: string): Promise<number> {
+  const result = await getPool().query<{ count: string }>(
+    'SELECT count(*) AS count FROM reservations WHERE listing_id = $1',
+    [listingId],
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+/** D-99: a card reservation left in Pending payment (as after a crash during the charge), with its bag taken. */
+export async function insertPendingCardReservation(
+  listingId: string,
+  consumerId: string,
+  createdAt: Date,
+): Promise<string> {
+  await getPool().query('UPDATE listings SET bags_available = bags_available - 1 WHERE id = $1', [listingId]);
+  const result = await getPool().query<{ id: string }>(
+    `INSERT INTO reservations (listing_id, consumer_id, method, status, created_at)
+     VALUES ($1, $2, 'card', 'Pending payment', $3) RETURNING id`,
+    [listingId, consumerId, createdAt],
+  );
+  return result.rows[0]?.id ?? '';
+}

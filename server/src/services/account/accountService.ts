@@ -6,6 +6,7 @@
 import bcrypt from 'bcryptjs';
 import {
   LANGUAGES,
+  isValidPassword,
   validateRegistration,
   validateSignUp,
   type Language,
@@ -17,6 +18,7 @@ import {
   DuplicateUserError,
   insertUser,
   updateLanguage,
+  updatePasswordHash,
   type NewUser,
   type UserRecord,
 } from '../../data/userRepository.js';
@@ -123,4 +125,18 @@ export async function createAdmin(input: {
       throw new SrsError(409, { error: 'E-ACC-01', field: error.field });
     throw error;
   }
+}
+
+/**
+ * POST /users/me/password {currentPassword, newPassword} (FR-ACC-06, decision D-95). 400 E-ACC-03 for a wrong current
+ * password (not 401, so the app does not log the user out); 400 E-ACC-02 when the new password breaks the US-01 rules.
+ * The user stays logged in.
+ */
+export async function changePassword(user: UserRecord, input: Record<string, unknown>): Promise<void> {
+  const { currentPassword, newPassword } = input;
+  const matches =
+    typeof currentPassword === 'string' && (await bcrypt.compare(currentPassword, user.passwordHash));
+  if (!matches) throw new SrsError(400, { error: 'E-ACC-03', fields: ['currentPassword'] });
+  if (!isValidPassword(newPassword)) throw new SrsError(400, { error: 'E-ACC-02', fields: ['newPassword'] });
+  await updatePasswordHash(user.id, await bcrypt.hash(newPassword as string, BCRYPT_COST));
 }

@@ -1,25 +1,41 @@
 // The product page of an offer (US-26, FR-RES-01, decision D-65), opened from the consumer home: photo, name, food
 // category, description, pickup time, bags left, the original price struck through next to the discounted price, and
 // the perishability category with "Collect by" (FR-RTE-04, IF-UI-05: how soon to collect, never that the food is
-// safe). Place order is shown but ordering is not built yet (US-27, US-28): pressing it says so.
-import { useEffect, useState } from 'react';
+// safe). US-28 (FR-RES-03): "Reserve without a card" reserves one bag and opens the reservation; card payment is
+// US-27. The warning before the BR-07 no-show block is shown above the button. D-97: the customer first chooses a
+// pickup slot (the first one is chosen); the hold starts when that slot starts. D-98: the slot is chosen from a drop-down
+// list.
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { getOffer, type Offer } from '@/api/client';
+import {
+  getNoShowStanding,
+  getOffer,
+  reserveWithoutCard,
+  type NoShowStanding,
+  type Offer,
+} from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { ListingPhoto } from '@/components/ListingPhoto';
 import { Notice } from '@/components/Notice';
+import { SelectField } from '@/components/SelectField';
 import { Screen } from '@/components/Screen';
 import { localDigits } from '@/i18n/digits';
 import { useLanguage } from '@/i18n/LanguageProvider';
-import { formatDateTime } from '@/listings/formatDateTime';
+import { formatDateTime, formatTime } from '@/listings/formatDateTime';
 import { listingText } from '@/listings/listingText';
 import { colors, radius, spacing } from '@/theme';
 
 type Problem = 'notFound' | 'unreachable' | 'unexpected';
+type ReserveProblem = 'soldOut' | 'alreadyReserved' | 'reserveFailed';
+
+/** NFR-15: one key per reserve attempt on this page, so a retry after a dropped connection is not a second bag. */
+function newIdempotencyKey(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
 
 function Row({ label, value, testID }: { label: string; value: string; testID?: string }) {
   return (
@@ -39,7 +55,11 @@ export default function OfferScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [offer, setOffer] = useState<Offer | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [orderNote, setOrderNote] = useState(false);
+  const [standing, setStanding] = useState<NoShowStanding | null>(null);
+  const [reserveProblem, setReserveProblem] = useState<ReserveProblem | null>(null);
+  const [reserving, setReserving] = useState(false);
+  const idempotencyKey = useRef(newIdempotencyKey());
+  const [chosenSlot, setChosenSlot] = useState<string | null>(null);
 
   useEffect(() => {
     if (token === null) return;
@@ -51,6 +71,9 @@ export default function OfferScreen() {
       else
         setProblem(result.kind === 'notFound' || result.kind === 'unreachable' ? result.kind : 'unexpected');
     });
+    void getNoShowStanding(token).then((result) => {
+      if (active && result.kind === 'ok') setStanding(result.standing);
+    });
     return () => {
       active = false;
     };
@@ -58,8 +81,39 @@ export default function OfferScreen() {
 
   if (token === null) return <Redirect href="/" />;
 
+  async function reserve() {
+    if (token === null || offer === null || slot === null) return;
+    setReserving(true);
+    setReserveProblem(null);
+    const result = await reserveWithoutCard(token, offer.id, slot, idempotencyKey.current);
+    setReserving(false);
+    if (result.kind === 'ok') {
+      idempotencyKey.current = newIdempotencyKey();
+      router.replace({ pathname: '/reservations/[id]', params: { id: result.reservation.id } });
+    } else if (result.kind === 'unauthorized' || result.kind === 'suspended') void signOut();
+    else if (result.kind === 'soldOut' || result.kind === 'notFound') setReserveProblem('soldOut');
+    else if (result.kind === 'alreadyReserved') setReserveProblem('alreadyReserved');
+    else setReserveProblem('reserveFailed');
+  }
+
   const text = offer === null ? null : listingText(offer, language);
   const price = (amount: number) => t('listing.egp', { amount });
+  // D-97: each slot runs to the next slot start, the last one to the pickup end.
+  const slots = offer?.pickupSlots ?? [];
+  const slot = chosenSlot !== null && slots.includes(chosenSlot) ? chosenSlot : (slots[0] ?? null);
+  const slotOptions = slots.map((start, index) => ({
+    value: start,
+    label: t('offers.slotRange', {
+      start: formatTime(start, language),
+      end: formatTime(slots[index + 1] ?? offer?.pickupEnd ?? start, language),
+    }),
+  }));
+  const chooseSlot = (index: number) => {
+    const next = slots[index];
+    if (next === undefined || next === slot) return;
+    setChosenSlot(next);
+    idempotencyKey.current = newIdempotencyKey();
+  };
 
   return (
     <Screen scroll>
@@ -130,14 +184,49 @@ export default function OfferScreen() {
               value={localDigits(offer.bagsAvailable, language)}
             />
 
-            {orderNote ? (
-              <Notice testID="offer-order-note" tone="info" message={t('offers.orderSoon')} />
+            {standing?.level === 'warning' ? (
+              <Notice
+                testID="offer-no-show"
+                tone="error"
+                message={t('noShow.warning', { days: standing.withinDays, blockDays: standing.blockDays })}
+              />
+            ) : null}
+            {/* D-99 (US-27): pay by card; the bag is held for the whole pickup time. */}
+            <Button
+              testID="offer-pay-card"
+              label={t('offers.payByCard')}
+              onPress={() => {
+                router.push({ pathname: '/pay/[id]', params: { id: offer.id } });
+              }}
+            />
+            <AppText variant="label" color="textMuted">
+              {t('offers.orReserve')}
+            </AppText>
+            {slotOptions.length > 0 ? (
+              // D-98: the slot is chosen from a drop-down list.
+              <SelectField
+                testID="offer-slots"
+                label={t('offers.slotTitle')}
+                placeholder={t('offers.slotTitle')}
+                options={slotOptions}
+                value={slot}
+                onChange={(value) => {
+                  chooseSlot(slots.indexOf(value));
+                }}
+              />
+            ) : (
+              <Notice testID="offer-no-slots" tone="info" message={t('offers.noSlots')} />
+            )}
+            {reserveProblem !== null ? (
+              <Notice testID="offer-reserve-problem" tone="error" message={t(`offers.${reserveProblem}`)} />
             ) : null}
             <Button
-              testID="offer-place-order"
-              label={t('offers.placeOrder')}
+              testID="offer-reserve"
+              label={t('offers.reserve')}
+              busy={reserving}
+              disabled={slot === null}
               onPress={() => {
-                setOrderNote(true);
+                void reserve();
               }}
             />
           </>

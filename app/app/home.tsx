@@ -91,7 +91,7 @@ export default function HomeScreen() {
   // D-65: the consumer home is a full-screen map with a panel at the bottom, so it does not scroll.
   if (group === 'consumer') {
     return (
-      <Screen edges={EDGES} header={<HomeHeader />}>
+      <Screen edges={EDGES} header={<HomeHeader profile />}>
         <View testID="home-consumer" style={styles.fill}>
           <ConsumerHome />
         </View>

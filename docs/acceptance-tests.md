@@ -181,6 +181,79 @@ Source for the values: SRS 5.5 BR-01, read from database tables (docs/feedback-c
 | AT-US26-07 | Normal | The chips and sheets | They are checked in Arabic and with TalkBack | Arabic is right-to-left; each chip is read with what it sets and its value; the slider, fields and buttons are read with their labels | NFR-06, NFR-07a, D-88 |
 | AT-US26-08 | Normal | A consumer opens the map | They look at the screen | One row of chips sits over the map, the pins are visible, and the list starts at about a third of the screen and can be pulled up | FR-RES-01, D-88 |
 
+
+## US-27 Card reservation (Sprint 2, D-99; test cards in docs/test-cards.md)
+
+| ID | Type | Given | When | Then | Requirements |
+| -- | ---- | ----- | ---- | ---- | ------------ |
+| AT-US27-01 | Normal | An offer at 40 EGP | The customer taps Pay by card, types 40000000, 12/30, 123 and taps Pay 40 EGP | The reservation opens: Confirmed, "Paid by card", the 6-digit code at once; no timer, no "I'm on my way"; bags left down by one | FR-RES-02 |
+| AT-US27-02 | Normal | The payment above | The team checks the card balance | 10,000 became 9,960 EGP | FR-RES-02 |
+| AT-US27-03 | Error | The card form | The customer types 1234, 13/30, 1 | Each field says what is wrong; nothing is sent | E-RES-01 |
+| AT-US27-04 | Error | The card form | The customer pays with 40000002, 40000003, 40000004 (10/26), an unknown number, a wrong CVV, and 40000005 (wait 1 minute) | Each time the reason is shown (declined, not enough money, expired, not found, wrong details, no answer in time) and the bag is still on offer | E-RES-01, IF-SW-03 |
+| AT-US27-05 | Normal | A card payment was made | The team looks at the reservations and payments tables | No card number, expiry or CVV is there, only the bank reference and amount | NFR-10, IF-SW-02 |
+| AT-US27-06 | Error | One bag left, two phones | Both pay by card at the same moment (40000000 and 40000001) | One gets the reservation; the other sees "the last bag was just reserved" and is not charged | E-RES-02, FR-RES-07 |
+
+## US-28 No-card hold and check-in, US-30 No over-reservation (Sprint 2)
+
+| ID | Type | Given | When | Then | Requirements |
+| -- | ---- | ----- | ---- | ---- | ------------ |
+| AT-US28-01 | Normal | An offer whose pickup starts in 30 minutes | A customer taps Reserve without a card | The reservation screen says the bag is held until 15 minutes after the pickup start, and the bags left go down by one | FR-RES-03, BR-02 |
+| AT-US28-02 | Normal | An offer whose pickup has started | A customer reserves | The hold ends 15 minutes from now | FR-RES-03 |
+| AT-US28-03 | Boundary | An offer whose pickup ends in 5 minutes | A customer reserves | The hold ends at the pickup end, not later | FR-RES-03 |
+| AT-US28-04 | Normal | A reservation was just made | The customer looks at it | A 6-digit pickup code is shown with "Show this code at the shop when you collect." | FR-RES-10, D-92 |
+| AT-US28-05 | Normal | A held reservation | The customer taps "I'm on my way" | The hold end moves 10 minutes later (never past the pickup end), a note says it can be done once, and the button goes away | FR-RES-04, BR-03 |
+| AT-US28-06 | Error | A reservation whose hold has ended | The customer opens it, or taps "I'm on my way" on a screen left open | It says the hold ended and the bag went back on sale; no code; check-in is refused | E-RES-05, FR-RES-05 |
+| AT-US28-07 | Error | A customer already holds a bag of an offer | They tap Reserve on the same offer again | "You already have a bag of this offer on hold." and no second bag is taken | D-91 |
+| AT-US28-08 | Normal | A held reservation and the worker running | The hold end passes without pickup | Within a minute the bag is back on the offer (bags left up by one) | FR-RES-05, SDD 3.2.5.5 |
+| AT-US28-09 | Normal | The app is in Arabic | The customer reserves and opens the reservation | Everything is Arabic, right-to-left, the code and times in Arabic-Indic digits | NFR-06 |
+| AT-US30-01 | Error | An offer with one bag left, two phones on the offer page | Both tap Reserve at the same moment | One gets the reservation; the other sees "Sorry, the last bag was just reserved by someone else." | FR-RES-07, E-RES-02 |
+| AT-US28-10 | Normal | A held reservation | The customer opens it | "Time left to collect" counts down every second from 15:00; under 5 minutes it turns red | FR-RES-03, D-96 |
+| AT-US28-11 | Normal | A held reservation | The customer taps "I'm on my way" | The countdown jumps 10 minutes up; the button turns grey and nothing happens when it is tapped again, also after leaving and opening the reservation again | FR-RES-04, E-RES-05, D-96 |
+| AT-US28-12 | Normal | An offer with pickup from 18:00 to 20:00 | The customer opens it at 17:00 and taps "Choose your pickup time" | The field shows 18:00 – 18:30; the list shows 18:00 – 18:30, 18:30 – 19:00, 19:00 – 19:30, 19:30 – 20:00; the slot chosen is the one reserved | D-97, D-98 |
+| AT-US28-13 | Normal | The same offer at 18:40 | The customer opens it | The first slot is 18:30 – 19:00 (the current one); 18:00 – 18:30 is gone. Choosing 18:30 and reserving: the timer shows about 15 minutes from now | D-97, FR-RES-03 |
+| AT-US28-14 | Normal | A reservation for the 19:30 slot, opened at 19:00 | The customer looks at it | "Your pickup time starts at 19:30" with "Starts in 30:00" counting down; no code, no timer, no "I'm on my way". At 19:30 the 15-minute timer, the pickup code and the button appear | D-97, FR-RES-04, FR-RES-10 |
+
+## US-31 My reservations and the profile menu (Sprint 2, D-94, D-95)
+
+| ID | Type | Given | When | Then | Requirements |
+| -- | ---- | ----- | ---- | ---- | ------------ |
+| AT-US31-01 | Normal | A customer with a held reservation | They tap the person icon, then Active reservations | The reservation is listed with its shop, "On hold" and the countdown; tapping it opens it with the pickup code | FR-RES-08, D-94 |
+| AT-US31-02 | Normal | A customer whose hold ended | They open Past reservations | It is listed as "Hold ended", without a countdown | FR-RES-08 |
+| AT-US31-03 | Normal | A customer with no reservations | They open Active reservations | "You have no active reservations." | FR-RES-08 |
+| AT-PROFILE-01 | Normal | A logged-in customer | They open Edit profile, type the current password and a new one that follows the rules, and save | "Your password was changed."; the next log in works only with the new password | FR-ACC-06, D-95 |
+| AT-PROFILE-02 | Error | Edit profile | They type a wrong current password, or a new one without a digit | The message is shown next to that field and nothing changes | E-ACC-03, E-ACC-02 |
+| AT-PROFILE-03 | Normal | The app is in Arabic | They open the menu and Edit profile | Arabic, right-to-left; the language switch and Log out work | NFR-06, FR-ACC-04, FR-ACC-09 |
+
+## US-32 Vendor reservations, US-33 Pickup code (Sprint 2, D-101)
+
+| ID | Type | Given | When | Then | Requirements |
+| -- | ---- | ----- | ---- | ---- | ------------ |
+| AT-US32-01 | Normal | A published listing of 3 bags, two customers reserved (one no-card, one card) | The vendor opens My listings | The card says "2 of 3 bags reserved · 0 collected" | FR-RES-09 |
+| AT-US32-02 | Normal | The same | The vendor opens the listing | Reservations: "2 reserved · 0 collected · 1 left"; To collect: Reservation #1 (No card · On hold, Slot starts / Hold until ...), Reservation #2 (Card · Confirmed, Any time in the pickup window); no names, phones or codes | FR-RES-09, D-101 |
+| AT-US32-03 | Normal | The no-card customer taps "I'm on my way" | The vendor waits up to a minute or taps Refresh | Reservation #1 shows "Hold until ... · On the way" | FR-RES-09 |
+| AT-US32-04 | Normal | A no-card hold ends without pickup | The vendor looks at the listing | Reservation #1 moves to Finished as "Hold ended"; one more bag is left | FR-RES-09, FR-RES-05 |
+| AT-US32-05 | Normal | A listing of 2 bags; both reserved and both handed over | The vendor opens My listings | Without leaving the app, the vendor goes back to My listings: the listing is in Past as "All collected" with "2 of 2 bags reserved · 2 collected" | FR-RES-09, D-102, D-103 |
+| AT-US32-06 | Normal | A paid card bag nobody collects | The pickup end passes | The listing moves to Past as "Ended" with "1 of N bags taken · 0 collected · 1 not collected"; in its Reservations it is under Finished as "Card · Not collected"; the customer sees it in Past reservations as "Not collected", without a code | D-102 |
+| AT-US15-D102-01 | Normal | A vendor with an active listing, a draft and an ended listing | They open My listings | Tabs "Active · 1", "Drafts · 1", "Past · 1"; Active is open and shows only the active listing | FR-LST-06, D-102 |
+| AT-US15-D102-02 | Normal | The same | They open Past | The ended listing shows "Ended" (not "Active: published"); a draft whose pickup time passed shows "Draft · not published" | D-102 |
+| AT-US15-D102-03 | Normal | An active listing | Its pickup end passes and the vendor reopens My listings | It has moved from Active to Past as Ended; customers no longer see it on the map | D-102 |
+| AT-US33-01 | Normal | A card reservation during the pickup window | The vendor types the customer's code and taps Check code | "Hand over this bag? Reservation #2 · Card" with Hand over and Cancel; nothing changes yet | FR-RES-10 |
+| AT-US33-02 | Normal | The confirmation above | The vendor taps Hand over | "Reservation #2 was handed over."; it moves to Finished as Collected; the customer's reservation shows Collected in Past reservations | FR-RES-10 |
+| AT-US33-03 | Error | The same code again, or a wrong code, or a code of another listing | The vendor taps Check code | "This code was already used." / "This code does not match any reservation of this listing." | E-RES-03 |
+| AT-US33-04 | Error | A card reservation before the pickup starts, or a no-card one before its slot | The vendor types its code | "Pickup for this reservation starts at 18:00." | E-RES-03, D-101 |
+| AT-US33-05 | Normal | The app is in Arabic | The vendor opens the listing and checks a code | Arabic, right-to-left; "الحجز رقم ١"; Arabic digits can be typed | NFR-06 |
+
+## US-35 No-show warning and block (asked for by Maryam, 2026-11-14; BR-07, FR-RES-13)
+
+| ID | Type | Given | When | Then | Requirements |
+| -- | ---- | ----- | ---- | ---- | ------------ |
+| AT-US35-01 | Normal | A customer has no missed pickups in the last 30 days | Their no-card hold expires without a pickup | They see a notice that the bag went to someone else, with "1 of 3 in 30 days" | BR-07, FR-RES-13 |
+| AT-US35-02 | Normal | A customer has 1 missed pickup in the last 30 days | Another no-card hold expires | They see the warning that one more missed pickup in 30 days stops no-card reserving for 14 days, as a notification and on the Reserve screen | BR-07, FR-RES-13 |
+| AT-US35-03 | Boundary | A customer missed a pickup 31 days ago and one yesterday | They open the Reserve screen | Only the notice shows (1 counted), not the warning | BR-07 |
+| AT-US35-04 | Normal | A customer missed 2 pickups, then collected one, then missed another, all within 30 days | The third hold expires | No-card reserving is blocked (a pickup in between does not reset the count) | BR-07, FR-RES-13 |
+| AT-US35-05 | Normal | The admin changes BR-07 to 4 no-shows | A customer has 3 in 30 days | The warning shows at 3, not 2, without a code change | BR-07 |
+| AT-US35-06 | Normal | The app is in Arabic | A customer gets the notice, warning or block | The text is Arabic, right-to-left, with Arabic-Indic digits | NFR-06 |
+
 ## All stories: regression in CI
 
 | ID        | Type   | Given                            | When                | Then                                                                                                                                   | SRS IDs |

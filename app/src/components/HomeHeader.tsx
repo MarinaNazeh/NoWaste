@@ -9,8 +9,10 @@ import { colors, spacing } from '@/theme';
 import { LanguageSwitch } from './LanguageSwitch';
 import { Logo } from './Logo';
 import { LogoutButton } from './LogoutButton';
+import { ProfileMenu } from './ProfileMenu';
 
-export function HomeHeader() {
+/** `profile`: the customer's profile icon and menu (D-94), beside Log out, so the switch stays at the end (D-42). */
+export function HomeHeader({ profile = false }: { profile?: boolean }) {
   const { direction } = useLanguage();
 
   return (
@@ -18,6 +20,7 @@ export function HomeHeader() {
       <View testID="home-header-start" style={styles.start}>
         <Logo width={44} />
         <LogoutButton />
+        {profile ? <ProfileMenu /> : null}
       </View>
       <LanguageSwitch compact />
     </View>

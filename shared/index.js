@@ -468,6 +468,35 @@ function validateOfferFilters(input, now) {
   };
 }
 
+/**
+ * D-99 (FR-RES-02): the card form of the pretend bank: an 8-digit number (spaces allowed), the expiry as MM/YY and a
+ * 3-digit CVV, with Arabic-Indic digits accepted. Only the format is checked; whether the card exists, is expired or
+ * has money is the bank's answer. Returns `{ ok, value: { number, expiryMonth, expiryYear, cvv } }` or `{ ok, fields }`.
+ */
+function validateCardInput(input) {
+  const text = (value) => (typeof value === 'string' ? toLatinDigits(value).replace(/\s+/g, '') : '');
+  const number = text(input.number);
+  const expiry = /^(\d{2})\/(\d{2})$/.exec(text(input.expiry));
+  const cvv = text(input.cvv);
+  const month = expiry === null ? 0 : Number(expiry[1]);
+  const fields = [];
+  if (!/^\d{8}$/.test(number)) fields.push('number');
+  if (expiry === null || month < 1 || month > 12) fields.push('expiry');
+  if (!/^\d{3}$/.test(cvv)) fields.push('cvv');
+  if (fields.length > 0) return { ok: false, fields };
+  return { ok: true, value: { number, expiryMonth: month, expiryYear: 2000 + Number(expiry[2]), cvv } };
+}
+
+/**
+ * FR-RES-10 (D-101): a pickup code typed by the vendor: exactly `digits` digits (BR-09, 6), spaces ignored, Arabic-Indic
+ * digits accepted. Returns the code in Western digits, or null.
+ */
+function parsePickupCode(value, digits) {
+  if (typeof value !== 'string') return null;
+  const code = toLatinDigits(value).replace(/\s+/g, '');
+  return new RegExp(`^[0-9]{${digits}}$`).test(code) ? code : null;
+}
+
 module.exports = {
   PASSWORD_RULES,
   LANGUAGES,
@@ -496,4 +525,6 @@ module.exports = {
   validateQuickPost,
   validateBranch,
   validateOfferFilters,
+  validateCardInput,
+  parsePickupCode,
 };

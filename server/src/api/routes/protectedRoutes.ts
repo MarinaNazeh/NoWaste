@@ -6,6 +6,7 @@ import { ROLE_GROUPS, type RoleGroup } from '../../domain/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { decideHandler, listApplicationsHandler } from './admin.js';
 import { logoutHandler } from './auth.js';
+import { createCardTokenHandler } from './mockBank.js';
 import { nearbyOffersHandler, offerHandler, offerPhotoHandler } from './feed.js';
 import { categoryHoursHandler } from './perishability.js';
 import {
@@ -26,7 +27,19 @@ import {
   updateShopHandler,
   uploadPhotoHandler,
 } from './listings.js';
-import { getMeHandler, patchMeHandler } from './users.js';
+import {
+  checkInHandler,
+  getReservationHandler,
+  myReservationsHandler,
+  noShowStandingHandler,
+  reserveHandler,
+} from './reservations.js';
+import { changePasswordHandler, getMeHandler, patchMeHandler } from './users.js';
+import {
+  completePickupHandler,
+  listingReservationsHandler,
+  verifyPickupHandler,
+} from './vendorReservations.js';
 
 export interface ProtectedRoute {
   method: 'get' | 'post' | 'patch' | 'delete';
@@ -47,6 +60,8 @@ export const protectedRoutes: readonly ProtectedRoute[] = [
   { method: 'post', path: '/auth/logout', roles: EVERYONE, handler: logoutHandler },
   { method: 'get', path: '/users/me', roles: EVERYONE, handler: getMeHandler },
   { method: 'patch', path: '/users/me', roles: EVERYONE, handler: patchMeHandler },
+  // FR-ACC-06 (D-95): every logged-in user may change their password.
+  { method: 'post', path: '/users/me/password', roles: EVERYONE, handler: changePasswordHandler },
   // D-70: what each perishability category means in hours (BR-01).
   { method: 'get', path: '/perishability/categories', roles: EVERYONE, handler: categoryHoursHandler },
   { method: 'get', path: '/admin/applications', roles: ['admin'], handler: listApplicationsHandler },
@@ -97,6 +112,24 @@ export const protectedRoutes: readonly ProtectedRoute[] = [
   },
   { method: 'post', path: '/listings/:id/unfit', ...APPROVED_VENDOR, handler: markUnfitHandler },
   { method: 'post', path: '/listings/:id/publish', ...APPROVED_VENDOR, handler: publishListingHandler },
+  // US-32, US-33 (D-101): the vendor's reservations of a listing and the pickup code at the counter.
+  { method: 'get', path: '/listings/:id/reservations', roles: ['vendor'], handler: listingReservationsHandler },
+  { method: 'post', path: '/listings/:id/pickups/verify', ...APPROVED_VENDOR, handler: verifyPickupHandler },
+  { method: 'post', path: '/listings/:id/pickups/complete', ...APPROVED_VENDOR, handler: completePickupHandler },
+  // US-28, US-30 (SDD C-09): consumers reserve without a card and check in. /no-show-standing before /:id.
+  // D-99: the pretend bank's card page (stands in for the payment gateway; the card never reaches NoWaste).
+  { method: 'post', path: '/mock-bank/tokens', roles: ['consumer'], handler: createCardTokenHandler },
+  { method: 'post', path: '/reservations', roles: ['consumer'], handler: reserveHandler },
+  // FR-RES-08 (D-94): the customer's active or past reservations.
+  { method: 'get', path: '/reservations', roles: ['consumer'], handler: myReservationsHandler },
+  {
+    method: 'get',
+    path: '/reservations/no-show-standing',
+    roles: ['consumer'],
+    handler: noShowStandingHandler,
+  },
+  { method: 'get', path: '/reservations/:id', roles: ['consumer'], handler: getReservationHandler },
+  { method: 'post', path: '/reservations/:id/checkin', roles: ['consumer'], handler: checkInHandler },
 ];
 
 export function mountProtectedRoutes(
