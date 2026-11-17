@@ -25,6 +25,8 @@ import ar from '../src/i18n/ar.json';
 import { renderApp } from './helpers/renderApp';
 
 jest.mock('@/api/client', () => ({
+  // US-32 (D-101): a published listing also loads its reservations.
+  getListingReservations: jest.fn().mockResolvedValue({ kind: 'unexpected' }),
   isServerHealthy: jest.fn().mockResolvedValue(true),
   logout: jest.fn().mockResolvedValue(undefined),
   getMe: jest.fn(),

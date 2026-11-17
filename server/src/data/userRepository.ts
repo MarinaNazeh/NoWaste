@@ -76,6 +76,11 @@ export async function findUserById(id: string): Promise<UserRecord | undefined> 
   return result.rows[0];
 }
 
+/** FR-ACC-06: saves a new password hash. */
+export async function updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+  await getPool().query('UPDATE users SET password_hash = $2 WHERE id = $1', [id, passwordHash]);
+}
+
 export async function updateLanguage(id: string, language: Language): Promise<UserRecord | undefined> {
   const result = await getPool().query<UserRecord>(
     `UPDATE users SET language = $2 WHERE id = $1 RETURNING ${columns}`,

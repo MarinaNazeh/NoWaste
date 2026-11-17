@@ -1,9 +1,11 @@
 // One listing in a list (US-15 My listings): photo, name in the reader's language (D-63), status, perishability category and pickup urgency
 // (FR-RTE-04, IF-UI-05: how soon to collect, never a statement that the food is safe), pickup end and price.
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Listing } from '@/api/client';
 import { useLanguage } from '@/i18n/LanguageProvider';
+import { bagCountsText, hasEnded, isAllCollected } from '@/listings/bagCounts';
 import { formatDateTime } from '@/listings/formatDateTime';
 import { listingText } from '@/listings/listingText';
 import { categoryText } from '@/listings/perishabilityText';
@@ -20,11 +22,17 @@ interface ListingCardProps {
 export function ListingCard({ token, listing, onPress }: ListingCardProps) {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  const [now] = useState(() => Date.now());
+  const ended = hasEnded(listing, now);
   const text = listingText(listing, language);
   const name = text.name ?? t('quickPost.title');
-  const status = t(
-    `listing.status.${listing.status === 'Fully reserved' ? 'FullyReserved' : listing.status}`,
-  );
+  // D-102: a Draft whose pickup time has passed can no longer be published.
+  const status =
+    listing.status === 'Draft' && ended
+      ? t('listing.draftEnded')
+      : isAllCollected(listing)
+        ? t('myListings.allCollected')
+        : t(`listing.status.${listing.status === 'Fully reserved' ? 'FullyReserved' : listing.status}`);
 
   return (
     <Pressable
@@ -55,6 +63,12 @@ export function ListingCard({ token, listing, onPress }: ListingCardProps) {
           {t('myListings.pickupEnds', { time: formatDateTime(listing.pickupEnd, language) })}
         </AppText>
         <AppText variant="caption">{t('listing.egp', { amount: listing.price })}</AppText>
+        {/* FR-RES-09 (D-101, D-102): taken, collected, waiting or not collected. */}
+        {listing.status !== 'Draft' && listing.reservations !== undefined ? (
+          <AppText testID={`my-listing-reserved-${listing.id}`} variant="caption" color="primary">
+            {bagCountsText(t, listing.reservations, listing.bagsTotal)}
+          </AppText>
+        ) : null}
       </View>
     </Pressable>
   );

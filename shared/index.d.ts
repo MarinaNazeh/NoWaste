@@ -298,3 +298,26 @@ export declare function validateOfferFilters(
   input: { maxPrice?: unknown; pickupBy?: unknown },
   now: Date,
 ): { ok: true; value: OfferFilters } | { ok: false; fields: OfferFilterField[] };
+
+/** D-99: a well-formed card for the pretend bank (only the format is checked). */
+export interface CardInput {
+  /** 8 digits. */
+  number: string;
+  expiryMonth: number;
+  /** Four digits, from the two typed (20YY). */
+  expiryYear: number;
+  /** 3 digits. */
+  cvv: string;
+}
+
+export type CardField = 'number' | 'expiry' | 'cvv';
+
+/** D-99 (FR-RES-02): checks the card form: 8-digit number, expiry MM/YY, 3-digit CVV. */
+export declare function validateCardInput(input: {
+  number?: unknown;
+  expiry?: unknown;
+  cvv?: unknown;
+}): { ok: true; value: CardInput } | { ok: false; fields: CardField[] };
+
+/** FR-RES-10 (D-101): a typed pickup code of exactly `digits` digits (BR-09), in Western digits, or null. */
+export declare function parsePickupCode(value: unknown, digits: number): string | null;

@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { getListing, publishListing, type Listing } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
+import { VendorReservations } from '@/components/VendorReservations';
 import { Button } from '@/components/Button';
 import { ListingPhoto } from '@/components/ListingPhoto';
 import { formatDateTime } from '@/listings/formatDateTime';
@@ -166,6 +167,14 @@ export default function ListingScreen() {
                 listing={listing}
                 onChange={setListing}
                 onSessionEnded={sessionEnded}
+              />
+            ) : null}
+            {/* US-32, US-33 (D-101): the reservations of a published listing and the pickup code. */}
+            {listing.status !== 'Draft' ? (
+              <VendorReservations
+                token={session}
+                listingId={listing.id}
+                ended={listing.status === 'Closed'}
               />
             ) : null}
             {listing.status === 'Draft' ? (

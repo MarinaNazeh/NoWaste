@@ -18,6 +18,8 @@ jest.mock('@/api/client', () => ({
   updateMyLanguage: jest.fn().mockResolvedValue(true),
   getNearbyOffers: jest.fn(),
   getOffer: jest.fn(),
+  // US-28: the offer page also reads the no-show standing (BR-07).
+  getNoShowStanding: jest.fn().mockResolvedValue({ kind: 'unexpected' }),
   downloadListingPhoto: jest.fn().mockResolvedValue(null),
   getCategoryHours: jest.fn().mockResolvedValue({
     kind: 'ok',
@@ -316,12 +318,11 @@ describe('D-65 the product page', () => {
     expect(screen.queryByText(/\bsafe\b/i)).toBeNull();
   });
 
-  test('D-65 Place order is shown but says ordering is not available yet', async () => {
+  // US-28 replaced the D-65 "Place order" placeholder with the real no-card reservation (tests in reservation.test.tsx).
+  test('FR-RES-03 the product page offers "Reserve without a card"', async () => {
     await openOffer();
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Place order' }));
-
-    expect(screen.getByTestId('offer-order-note')).toHaveTextContent(/Ordering is not available yet/);
+    expect(screen.getByRole('button', { name: 'Reserve without a card' })).toBeOnTheScreen();
   });
 
   test('FR-RES-01 an offer that is no longer available says so', async () => {

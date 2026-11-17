@@ -354,6 +354,8 @@ export interface Listing {
   unfitForPeople: boolean;
   latitude: number;
   longitude: number;
+  /** FR-RES-09 (D-101, D-102): the bag counts; on My listings and the listing page. */
+  reservations?: BagCounts;
 }
 
 /** US-18: most urgent first. */
@@ -834,6 +836,8 @@ export interface Offer {
   /** null on the product page (no consumer location sent). */
   distanceMeters: number | null;
   place: OfferPlace;
+  /** D-97: the pickup slot starts a no-card customer can choose now (only on the product page). */
+  pickupSlots?: string[];
 }
 
 /** The distance used and the slider range, from the settings row FR-RES-01. */
@@ -879,4 +883,305 @@ export async function getOffer(
   return result.status === 200 && result.data !== null
     ? { kind: 'ok', offer: result.data as unknown as Offer }
     : { kind: 'unexpected' };
+}
+
+// US-28, US-30 (SDD C-09): no-card reservations, "I'm on my way" and the warning before the BR-07 block.
+
+export interface Reservation {
+  id: string;
+  method: 'card' | 'no-card';
+  /** D-102: "Not collected" = still Held or Confirmed at the pickup end (shown only; the status stays until US-35). */
+  status:
+    | 'Pending payment'
+    | 'Confirmed'
+    | 'Held'
+    | 'Completed'
+    | 'Released'
+    | 'Cancelled'
+    | 'No-show'
+    | 'Not collected';
+  holdExpiresAt: string | null;
+  /** D-97: the chosen pickup slot. */
+  slotStart: string | null;
+  checkedIn: boolean;
+  /** FR-RES-10: the 6-digit code while the reservation is active and its slot has started (D-97), otherwise null. */
+  pickupCode: string | null;
+  createdAt: string;
+  listing: {
+    id: string;
+    nameAr: string | null;
+    nameEn: string | null;
+    sourceLanguage: 'ar' | 'en' | null;
+    price: number;
+    pickupStart: string;
+    pickupEnd: string;
+    shopName: string;
+    address: string;
+  };
+}
+
+export interface NoShowStanding {
+  level: 'none' | 'notice' | 'warning' | 'blocked';
+  count: number;
+  leftBeforeBlock: number;
+  limit: number;
+  withinDays: number;
+  blockDays: number;
+}
+
+/**
+ * POST /reservations (FR-RES-03): reserve one bag without a card. `idempotencyKey` makes a repeated tap or a retry
+ * after a dropped connection return the same reservation (NFR-15).
+ */
+export async function reserveWithoutCard(
+  token: string,
+  listingId: string,
+  slotStart: string,
+  idempotencyKey: string,
+): Promise<
+  Protected<
+    | { kind: 'ok'; reservation: Reservation }
+    | { kind: 'soldOut' }
+    | { kind: 'alreadyReserved' }
+    | { kind: 'notFound' }
+  >
+> {
+  const result = await protectedCall(
+    '/reservations',
+    { method: 'POST', body: JSON.stringify({ listingId, method: 'no-card', slotStart, idempotencyKey }) },
+    token,
+  );
+  if (result.kind !== 'response') return result;
+  if (result.status === 409 && result.data?.error === 'E-RES-02') return { kind: 'soldOut' };
+  if (result.status === 409 && result.data?.error === 'already_reserved') return { kind: 'alreadyReserved' };
+  if (result.status === 404) return { kind: 'notFound' };
+  return (result.status === 201 || result.status === 200) && result.data !== null
+    ? { kind: 'ok', reservation: result.data as unknown as Reservation }
+    : { kind: 'unexpected' };
+}
+
+/** GET /reservations/:id */
+export async function getReservation(
+  token: string,
+  id: string,
+): Promise<Protected<{ kind: 'ok'; reservation: Reservation } | { kind: 'notFound' }>> {
+  const result = await protectedCall(`/reservations/${encodeURIComponent(id)}`, {}, token);
+  if (result.kind !== 'response') return result;
+  if (result.status === 404) return { kind: 'notFound' };
+  return result.status === 200 && result.data !== null
+    ? { kind: 'ok', reservation: result.data as unknown as Reservation }
+    : { kind: 'unexpected' };
+}
+
+/** POST /reservations/:id/checkin: "I'm on my way" (FR-RES-04); refused a second time or after the hold (E-RES-05). */
+export async function checkInReservation(
+  token: string,
+  id: string,
+): Promise<Protected<{ kind: 'ok'; reservation: Reservation } | { kind: 'refused' } | { kind: 'notFound' }>> {
+  const result = await protectedCall(
+    `/reservations/${encodeURIComponent(id)}/checkin`,
+    { method: 'POST' },
+    token,
+  );
+  if (result.kind !== 'response') return result;
+  if (result.status === 409 && result.data?.error === 'E-RES-05') return { kind: 'refused' };
+  if (result.status === 404) return { kind: 'notFound' };
+  return result.status === 200 && result.data !== null
+    ? { kind: 'ok', reservation: result.data as unknown as Reservation }
+    : { kind: 'unexpected' };
+}
+
+/** GET /reservations/no-show-standing: the notice or warning before the BR-07 block. */
+export async function getNoShowStanding(
+  token: string,
+): Promise<Protected<{ kind: 'ok'; standing: NoShowStanding }>> {
+  const result = await protectedCall('/reservations/no-show-standing', {}, token);
+  if (result.kind !== 'response') return result;
+  return result.status === 200 && result.data !== null
+    ? { kind: 'ok', standing: result.data as unknown as NoShowStanding }
+    : { kind: 'unexpected' };
+}
+
+/** GET /reservations?scope=active|past: the customer's reservations (FR-RES-08, D-94). */
+export async function getMyReservations(
+  token: string,
+  scope: 'active' | 'past',
+): Promise<Protected<{ kind: 'ok'; reservations: Reservation[] }>> {
+  const result = await protectedCall(`/reservations?scope=${scope}`, {}, token);
+  if (result.kind !== 'response') return result;
+  const data = result.data;
+  return result.status === 200 && data !== null && Array.isArray(data.reservations)
+    ? { kind: 'ok', reservations: data.reservations as Reservation[] }
+    : { kind: 'unexpected' };
+}
+
+/** POST /users/me/password (FR-ACC-06, D-95): E-ACC-03 wrong current password, E-ACC-02 new password breaks the rules. */
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<Protected<{ kind: 'ok' } | { kind: 'wrongCurrent' } | { kind: 'invalidNew' }>> {
+  const result = await protectedCall(
+    '/users/me/password',
+    { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) },
+    token,
+  );
+  if (result.kind !== 'response') return result;
+  if (result.status === 204) return { kind: 'ok' };
+  if (result.status === 400 && result.data?.error === 'E-ACC-03') return { kind: 'wrongCurrent' };
+  if (result.status === 400 && result.data?.error === 'E-ACC-02') return { kind: 'invalidNew' };
+  return { kind: 'unexpected' };
+}
+
+// US-27 pay by card (FR-RES-02, E-RES-01), decision D-99.
+
+export type PaymentFailure =
+  | 'unknown_card'
+  | 'wrong_details'
+  | 'expired_card'
+  | 'declined'
+  | 'insufficient_funds'
+  | 'timeout'
+  | 'invalid_token';
+
+/**
+ * POST /mock-bank/tokens: the card goes to the pretend bank only (it stands in for the payment gateway's card page) and
+ * the bank answers with a one-time token. NoWaste never receives the card (NFR-10, IF-SW-02).
+ */
+export async function createCardToken(
+  token: string,
+  card: { number: string; expiry: string; cvv: string },
+): Promise<
+  Protected<{ kind: 'ok'; token: string } | { kind: 'invalidCard'; fields: ('number' | 'expiry' | 'cvv')[] }>
+> {
+  const result = await protectedCall(
+    '/mock-bank/tokens',
+    { method: 'POST', body: JSON.stringify(card) },
+    token,
+  );
+  if (result.kind !== 'response') return result;
+  if (result.status === 400 && result.data?.error === 'invalid_card') {
+    return { kind: 'invalidCard', fields: (result.data.fields ?? []) as ('number' | 'expiry' | 'cvv')[] };
+  }
+  return result.status === 201 && typeof result.data?.token === 'string'
+    ? { kind: 'ok', token: result.data.token }
+    : { kind: 'unexpected' };
+}
+
+/** POST /reservations with method "card": only the bank's one-time token is sent (FR-RES-02, NFR-15 key). */
+export async function reserveByCard(
+  token: string,
+  listingId: string,
+  paymentToken: string,
+  idempotencyKey: string,
+): Promise<
+  Protected<
+    | { kind: 'ok'; reservation: Reservation }
+    | { kind: 'paymentFailed'; reason: PaymentFailure }
+    | { kind: 'soldOut' }
+    | { kind: 'notFound' }
+  >
+> {
+  const result = await protectedCall(
+    '/reservations',
+    { method: 'POST', body: JSON.stringify({ listingId, method: 'card', paymentToken, idempotencyKey }) },
+    token,
+  );
+  if (result.kind !== 'response') return result;
+  if (result.status === 402 && result.data?.error === 'E-RES-01') {
+    return { kind: 'paymentFailed', reason: result.data.reason as PaymentFailure };
+  }
+  if (result.status === 409 && result.data?.error === 'E-RES-02') return { kind: 'soldOut' };
+  if (result.status === 404) return { kind: 'notFound' };
+  return (result.status === 201 || result.status === 200) && result.data !== null
+    ? { kind: 'ok', reservation: result.data as unknown as Reservation }
+    : { kind: 'unexpected' };
+}
+
+// US-32 the vendor's reservations of a listing and US-33 the pickup code at the counter (FR-RES-09, FR-RES-10), D-101.
+
+/** D-102: taken = waiting + collected + not collected (a released hold gives its bag back). */
+export interface BagCounts {
+  taken: number;
+  collected: number;
+  waiting: number;
+  notCollected: number;
+}
+
+export interface VendorReservationRow {
+  id: string;
+  /** #1, #2, ... in the order customers reserved; no customer details are given to the vendor. */
+  number: number;
+  method: 'card' | 'no-card';
+  status: Reservation['status'];
+  slotStart: string | null;
+  holdExpiresAt: string | null;
+  checkedIn: boolean;
+}
+
+export interface VendorReservations {
+  summary: BagCounts & { bagsTotal: number; available: number };
+  reservations: VendorReservationRow[];
+}
+
+/** GET /listings/:id/reservations (the vendor's own listing). */
+export async function getListingReservations(
+  token: string,
+  listingId: string,
+): Promise<Protected<{ kind: 'ok'; view: VendorReservations } | { kind: 'notFound' }>> {
+  const result = await protectedCall(`/listings/${encodeURIComponent(listingId)}/reservations`, {}, token);
+  if (result.kind !== 'response') return result;
+  if (result.status === 404) return { kind: 'notFound' };
+  return result.status === 200 && result.data !== null && Array.isArray(result.data.reservations)
+    ? { kind: 'ok', view: result.data as unknown as VendorReservations }
+    : { kind: 'unexpected' };
+}
+
+export type PickupRefusal = 'wrong_code' | 'already_used' | 'expired' | 'not_started' | 'ended' | 'invalid';
+
+type PickupAnswer = Protected<
+  | { kind: 'ok'; reservation: Pick<VendorReservationRow, 'id' | 'number' | 'method' | 'status'> }
+  | { kind: 'refused'; reason: PickupRefusal; startsAt?: string }
+  | { kind: 'notFound' }
+>;
+
+async function pickupCall(
+  token: string,
+  listingId: string,
+  step: 'verify' | 'complete',
+  code: string,
+): Promise<PickupAnswer> {
+  const result = await protectedCall(
+    `/listings/${encodeURIComponent(listingId)}/pickups/${step}`,
+    { method: 'POST', body: JSON.stringify({ code }) },
+    token,
+  );
+  if (result.kind !== 'response') return result;
+  if (result.status === 400) return { kind: 'refused', reason: 'invalid' };
+  if (result.status === 409 && result.data?.error === 'E-RES-03') {
+    const startsAt = result.data.startsAt;
+    return {
+      kind: 'refused',
+      reason: result.data.reason as PickupRefusal,
+      ...(typeof startsAt === 'string' ? { startsAt } : {}),
+    };
+  }
+  if (result.status === 404) return { kind: 'notFound' };
+  const reservation = result.data?.reservation;
+  return result.status === 200 && typeof reservation === 'object' && reservation !== null
+    ? {
+        kind: 'ok',
+        reservation: reservation as Pick<VendorReservationRow, 'id' | 'number' | 'method' | 'status'>,
+      }
+    : { kind: 'unexpected' };
+}
+
+/** POST /listings/:id/pickups/verify: which reservation the typed code belongs to (nothing changes). */
+export function verifyPickup(token: string, listingId: string, code: string): Promise<PickupAnswer> {
+  return pickupCall(token, listingId, 'verify', code);
+}
+
+/** POST /listings/:id/pickups/complete: the bag is handed over (Completed). */
+export function completePickup(token: string, listingId: string, code: string): Promise<PickupAnswer> {
+  return pickupCall(token, listingId, 'complete', code);
 }

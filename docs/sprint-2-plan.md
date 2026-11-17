@@ -12,7 +12,7 @@ Sprint goal (SRS): "A pickup code can be shown and entered by the end of Sprint 
 | US-21 | Rank by distance and time left       | 2   | FR-RTE-09                                                                                                  |
 | US-26 | Map search and filters               | 5   | FR-RES-01: pins per branch, distance slider 10 km (1–50), filters price, pickup time, vendor rating        |
 | US-27 | Card reservation                     | 8   | FR-RES-02: pay in full by card; confirmed only after the gateway approves; held for the whole window      |
-| US-28 | No-card hold and check-in            | 8   | FR-RES-03 (45-min hold), FR-RES-04 ("I'm on my way" +20 min, once), FR-RES-05 (release when hold expires)  |
+| US-28 | No-card hold and check-in            | 8   | FR-RES-03 (15-min hold, D-89), FR-RES-04 ("I'm on my way" +10 min, once, D-89), FR-RES-05 (release when hold expires)  |
 | US-30 | No over-reservation                  | 3   | FR-RES-07                                                                                                  |
 | US-31 | My reservations                      | 3   | FR-RES-08 (current and previous, pickup code for active)                                                  |
 | US-32 | Vendor reservations                  | 2   | FR-RES-09                                                                                                  |
@@ -108,16 +108,17 @@ Build, in this order, with tests first from the SRS acceptance criteria (SRS sec
 STEP 1 – reservation base (others build on it, so open a PR as soon as it passes):
 - Migration: a reservations table as in SDD 4.2 (Reservation entity): listing, consumer, branch, type (card / no_card),
   status, hold_until, pickup code column (Farah fills it in US-33), timestamps. Settings rows for the hold values
-  FR-RES-03 (45 minutes), FR-RES-04 (20 minutes); never constants in code.
+  FR-RES-03 (15 minutes, D-89), FR-RES-04 (10 minutes, D-89); never constants in code.
 - Data layer (server/src/data) and a Reservation Service (server/src/services/reservation) with a domain module
   (server/src/domain/reservation.ts) for the pure hold-time rules.
 - US-30 / FR-RES-07: never more reservations than bags. Reserving and decreasing bags_available must be one
   transaction with a row lock, and a test must fire parallel requests at the last bag and prove only one wins.
 STEP 2 – US-28:
-- FR-RES-03 no-card reservation: hold for 45 min from the later of the reservation time and the pickup start,
+- FR-RES-03 no-card reservation: hold for 15 min (D-89) from the later of the reservation time and the pickup start,
   never past the pickup end.
-- FR-RES-04 "I'm on my way": once per reservation, +20 min, capped at the pickup end.
-- FR-RES-05 release when the hold expires without pickup. Waitlist (US-29) is Sprint 3, so the bag goes back to
+- FR-RES-04 "I'm on my way": once per reservation, +10 min (D-89), capped at the pickup end.
+- FR-RES-05 release when the hold expires without pickup; record it as a no-show with its time (the warning before the BR-07 block uses it:
+  server/src/domain/noShow.ts and the noShow.* texts). Waitlist (US-29) is Sprint 3, so the bag goes back to
   the listing. Decide with me whether expiry runs in the worker C-19 (server/src/worker.ts) or is checked when
   read; follow the SDD.
 - App: Reserve button on the offer page (no-card), a reservation screen with the hold end time and
@@ -216,12 +217,12 @@ Every person, before opening the PR:
 - [ ] No secrets in the repo; new keys only in .env.example without values
 
 **Marina (US-28, US-30)**
-- [ ] No-card reserve before the window: hold ends 45 min after the window start
-- [ ] Reserve inside the window: hold ends 45 min after now; near the end: capped at the window end
-- [ ] "I'm on my way" adds 20 min once; the second tap is refused; capped at the window end
+- [ ] No-card reserve before the window: hold ends 15 min after the window start
+- [ ] Reserve inside the window: hold ends 15 min after now; near the end: capped at the window end
+- [ ] "I'm on my way" adds 10 min once; the second tap is refused; capped at the window end
 - [ ] Hold expires: reservation released, bag count goes back up
 - [ ] Two phones reserve the last bag at the same time: only one succeeds (FR-RES-07)
-- [ ] Changing the 45/20-minute settings rows changes the behaviour without code changes
+- [ ] Changing the 15/10-minute settings rows changes the behaviour without code changes
 
 **Eman (US-27)**
 - [ ] Approved sandbox card: reservation confirmed, held for the whole window

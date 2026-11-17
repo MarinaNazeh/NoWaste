@@ -5,8 +5,10 @@ import { validateOfferFilters } from '@nowaste/shared';
 import { getStorage, type PhotoType } from '../../adapters/storage/storage.js';
 import { clock } from '../../domain/clock.js';
 import { SrsError } from '../../domain/errors.js';
+import { pickupSlots } from '../../domain/reservation.js';
 import { findOffer, findOffersNear, type OfferRecord } from '../../data/offerRepository.js';
 import { getSetting } from '../../data/settingsRepository.js';
+import { slotRule } from '../reservation/reservationService.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -143,9 +145,14 @@ async function visibleOffer(id: string): Promise<OfferRecord> {
   return offer;
 }
 
-/** GET /listings/nearby/:id: the product page of an offer that a consumer can still buy. */
-export async function getOffer(id: string): Promise<OfferView> {
-  return toView(await visibleOffer(id));
+/**
+ * GET /listings/nearby/:id: the product page of an offer that a consumer can still buy, with the pickup slots a
+ * no-card customer can choose now (D-97, settings row PICKUP-SLOTS).
+ */
+export async function getOffer(id: string): Promise<OfferView & { pickupSlots: string[] }> {
+  const offer = await visibleOffer(id);
+  const slots = pickupSlots(offer.pickupStart, offer.pickupEnd, clock.now(), await slotRule());
+  return { ...toView(offer), pickupSlots: slots.map((slot) => slot.toISOString()) };
 }
 
 /** GET /listings/nearby/:id/photo: the photo of an offer that a consumer can still buy. */

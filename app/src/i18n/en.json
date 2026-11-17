@@ -285,7 +285,7 @@
       "Draft": "Draft: not published yet",
       "Active": "Active: published",
       "FullyReserved": "Fully reserved",
-      "Closed": "Closed",
+      "Closed": "Ended",
       "Cancelled": "Cancelled"
     },
     "errors": {
@@ -330,7 +330,8 @@
     "pickWindowLabel": "Pickup window allowed",
     "pickWindowValue": "Estimate: {{start}} to {{end}}",
     "pickByReason": "{{category}}, worked out from the food category and how it is stored.",
-    "pickByLabel": "Latest pickup end"
+    "pickByLabel": "Latest pickup end",
+    "draftEnded": "Draft · not published"
   },
   "quickPost": {
     "title": "Quick Post",
@@ -367,7 +368,19 @@
     "retry": "Try again",
     "pickupEnds": "Pickup ends {{time}}",
     "openHint": "Opens the listing details",
-    "emptyInformal": "You have no listings yet. Use Quick Post to post surplus food."
+    "emptyInformal": "You have no listings yet. Use Quick Post to post surplus food.",
+    "tabsLabel": "Which listings to show",
+    "tabActive": "Active",
+    "tabDrafts": "Drafts",
+    "tabPast": "Past",
+    "tab": "{{tab}} · {{count}}",
+    "emptyTab": "No listings here.",
+    "countsWaiting": "{{count}} waiting for pickup",
+    "countsReserved": "{{taken}} of {{total}} bags reserved",
+    "countsCollected": "{{count}} collected",
+    "countsNotCollected": "{{count}} not collected",
+    "countsNone": "No bags reserved",
+    "allCollected": "All collected"
   },
   "perishability": {
     "title": "Perishability category",
@@ -459,8 +472,6 @@
     "pickupWindow": "{{start}} to {{end}}",
     "bagsLabel": "Bags left",
     "priceA11y": "Was {{was}}, now {{now}}",
-    "placeOrder": "Place order",
-    "orderSoon": "Ordering is not available yet. It is coming in a later update.",
     "problems": {
       "notFound": "This offer is no longer available.",
       "unreachable": "We could not reach the server. Check your connection and try again.",
@@ -484,7 +495,17 @@
       "apply": "Apply",
       "clearOne": "Clear",
       "done": "Done"
-    }
+    },
+    "reserve": "Reserve without a card",
+    "soldOut": "Sorry, the last bag was just reserved by someone else.",
+    "alreadyReserved": "You already have a bag of this offer on hold.",
+    "reserveFailed": "Could not reserve. Check your connection and try again.",
+    "openReservation": "View my reservation",
+    "slotTitle": "Choose your pickup time",
+    "slotRange": "{{start}} – {{end}}",
+    "noSlots": "No pickup times are left for this offer.",
+    "payByCard": "Pay by card",
+    "orReserve": "Or reserve without a card"
   },
   "aiDraft": {
     "fill": "Fill in with AI draft",
@@ -498,5 +519,111 @@
     "quantityEstimate": "Estimate: about {{count}} portions",
     "secondNameLabel": "Name in Arabic",
     "secondDescriptionLabel": "Description in Arabic"
+  },
+  "noShow": {
+    "notice": "Your reservation expired and the bag went to someone else. Missed pickups: {{count}} of {{limit}} in {{days}} days.",
+    "warning": "Warning: one more missed pickup within {{days}} days and you cannot reserve without a card for {{blockDays}} days.",
+    "blocked": "You missed {{limit}} pickups within {{days}} days, so you cannot reserve without a card for {{blockDays}} days. You can still reserve and pay by card."
+  },
+  "reservation": {
+    "title": "Your reservation",
+    "statusLabel": "Status",
+    "statuses": {
+      "Pending payment": "Waiting for payment",
+      "Confirmed": "Confirmed",
+      "Held": "On hold",
+      "Completed": "Collected",
+      "Released": "Released",
+      "Cancelled": "Cancelled",
+      "No-show": "Hold ended",
+      "Not collected": "Not collected"
+    },
+    "holdUntil": "Held for you until {{time}}",
+    "codeLabel": "Pickup code",
+    "codeHint": "Show this code at the shop when you collect.",
+    "onMyWay": "I'm on my way",
+    "checkedIn": "You checked in, so your hold was extended. You can check in only once.",
+    "checkInRefused": "Check-in is not possible: you already checked in or the hold has ended.",
+    "expired": "The hold ended before pickup, so the bag went back on sale.",
+    "failed": "Something went wrong. Check your connection and try again.",
+    "timeLeft": "Time left to collect: {{time}}",
+    "activeEmpty": "You have no active reservations.",
+    "pastEmpty": "You have no past reservations.",
+    "slotStartsAt": "Your pickup time starts at {{time}}",
+    "startsIn": "Starts in {{time}}",
+    "beforeSlot": "The timer, your pickup code and \"I'm on my way\" appear when your pickup time starts.",
+    "paidByCard": "Paid by card. Your bag is held for the whole pickup time."
+  },
+  "profile": {
+    "menu": "Profile menu",
+    "active": "Active reservations",
+    "past": "Past reservations",
+    "edit": "Edit profile",
+    "close": "Close",
+    "languageLabel": "Language",
+    "passwordTitle": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "savePassword": "Save password",
+    "passwordSaved": "Your password was changed.",
+    "wrongCurrent": "The current password is not correct.",
+    "newPasswordInvalid": "The new password does not follow the rules below.",
+    "currentRequired": "Enter your current password.",
+    "failed": "Something went wrong. Check your connection and try again.",
+    "logout": "Log out"
+  },
+  "payment": {
+    "title": "Pay by card",
+    "number": "Card number (8 digits)",
+    "expiry": "Expiry (MM/YY)",
+    "cvv": "CVV",
+    "pay": "Pay {{amount}}",
+    "paying": "Paying…",
+    "holdNote": "Paying by card holds your bag for the whole pickup time.",
+    "numberInvalid": "Enter the 8-digit card number.",
+    "expiryInvalid": "Enter the expiry as MM/YY.",
+    "cvvInvalid": "Enter the 3-digit CVV.",
+    "failed": {
+      "unknown_card": "This card was not found. Check the number.",
+      "wrong_details": "The expiry date or CVV is not correct.",
+      "expired_card": "This card has expired.",
+      "declined": "Your bank declined this card.",
+      "insufficient_funds": "There is not enough money on this card.",
+      "timeout": "The bank did not answer in time, so the payment did not go through. Please try again.",
+      "invalid_token": "The payment could not be completed. Please enter the card again.",
+      "other": "Something went wrong. Check your connection and try again."
+    }
+  },
+  "vendorReservations": {
+    "title": "Reservations",
+    "toCollect": "To collect",
+    "finished": "Finished",
+    "none": "No reservations yet.",
+    "number": "Reservation #{{number}}",
+    "card": "Card",
+    "noCard": "No card",
+    "row": "{{method}} · {{status}}",
+    "slotStarts": "Slot starts {{time}}",
+    "holdUntil": "Hold until {{time}}",
+    "onTheWay": "On the way",
+    "anyTime": "Any time in the pickup window",
+    "codeLabel": "Pickup code",
+    "codeHint": "Type the 6-digit code the customer shows you.",
+    "check": "Check code",
+    "confirmTitle": "Hand over this bag?",
+    "handOver": "Hand over",
+    "cancel": "Cancel",
+    "handedOver": "Reservation #{{number}} was handed over.",
+    "failed": "Something went wrong. Check your connection and try again.",
+    "refresh": "Refresh",
+    "refused": {
+      "wrong_code": "This code does not match any reservation of this listing.",
+      "already_used": "This code was already used.",
+      "expired": "This reservation has ended, so the code no longer works.",
+      "not_started": "Pickup for this reservation starts at {{time}}.",
+      "ended": "The pickup time of this listing has ended.",
+      "invalid": "Enter the 6-digit code the customer shows you."
+    },
+    "summaryLeft": "{{counts}} · {{available}} left"
   }
 }

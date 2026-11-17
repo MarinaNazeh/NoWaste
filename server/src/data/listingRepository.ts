@@ -124,6 +124,18 @@ export async function findVendorListing(vendorId: string, id: string): Promise<L
   return result.rows[0];
 }
 
+/**
+ * D-102: listings whose pickup has ended are Closed (the SDD lifecycle Active → Closed). Run by the worker and before
+ * the vendor's listings are read. Returns how many were closed.
+ */
+export async function closeEndedListings(now: Date): Promise<number> {
+  const result = await getPool().query(
+    `UPDATE listings SET status = 'Closed' WHERE status IN ('Active', 'Fully reserved') AND pickup_end <= $1`,
+    [now],
+  );
+  return result.rowCount ?? 0;
+}
+
 /** Every listing of this vendor, newest first (FR-LST-06). */
 export async function findVendorListings(vendorId: string): Promise<ListingRecord[]> {
   const result = await getPool().query<ListingRecord>(

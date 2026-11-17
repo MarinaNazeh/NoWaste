@@ -23,6 +23,8 @@ import { LANGUAGE_STORAGE_KEY } from '@/i18n/languageStorage';
 import { renderApp } from './helpers/renderApp';
 
 jest.mock('@/api/client', () => ({
+  // US-32 (D-101): a published listing also loads its reservations.
+  getListingReservations: jest.fn().mockResolvedValue({ kind: 'unexpected' }),
   isServerHealthy: jest.fn().mockResolvedValue(true),
   logout: jest.fn().mockResolvedValue(undefined),
   getMe: jest.fn(),
@@ -141,10 +143,23 @@ beforeEach(async () => {
   });
 });
 
+// D-102: the tests run at 10:00 on the day of the fixtures' pickup, so the Draft is still in the Drafts tab.
+let nowSpy: jest.SpyInstance<number, []>;
+
+beforeEach(() => {
+  nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-01T10:00:00.000Z'));
+});
+
+afterEach(() => {
+  nowSpy.mockRestore();
+});
+
 /** Opens the Draft listing from My listings, as a vendor does after logging in again. */
 async function openDraft() {
   await renderApp('/home');
   await fireEvent.press(await screen.findByTestId('home-my-listings'));
+  // D-102: drafts are in their own tab of My listings.
+  await fireEvent.press(await screen.findByRole('button', { name: /^(Drafts|المسودات)/ }));
   await fireEvent.press(await screen.findByTestId('my-listing-l1'));
   await screen.findByTestId('listing-status');
 }
@@ -293,6 +308,7 @@ describe('FR-RTE-04 IF-UI-05 the category and urgency are shown with the listing
     });
     await renderApp('/home');
     await fireEvent.press(await screen.findByTestId('home-my-listings'));
+    await fireEvent.press(await screen.findByRole('button', { name: /^Drafts/ }));
 
     const card = await screen.findByTestId('my-listing-l1');
     expect(within(card).getByText('Highly perishable')).toBeOnTheScreen();
@@ -314,6 +330,7 @@ describe('FR-RTE-04 IF-UI-05 the category and urgency are shown with the listing
     });
     await renderApp('/home');
     await fireEvent.press(await screen.findByTestId('home-my-listings'));
+    await fireEvent.press(await screen.findByRole('button', { name: /^Drafts/ }));
 
     expect(
       await screen.findByText(`Pickup ends ${formatDateTime('2026-11-01T13:00:00.000Z', 'en')}`),

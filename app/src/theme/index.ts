@@ -20,6 +20,8 @@ export const colors = {
   success: '#2C5F2D',
   // Decorative only (never used for text): the light leaf green of the logo.
   leaf: '#6BAF5B',
+  // D-96: a button that can no longer be pressed (for example "I'm on my way" after the one check-in) is grey.
+  disabled: '#DEDCD6',
 } as const;
 
 export type ColorName = keyof typeof colors;
@@ -27,6 +29,7 @@ export type ColorName = keyof typeof colors;
 /** Text colour / background colour pairs that appear in the app. */
 export const textColorPairs: readonly [foreground: ColorName, background: ColorName][] = [
   ['text', 'background'],
+  ['textMuted', 'disabled'],
   ['text', 'surface'],
   ['text', 'accent'],
   // Typed text and notice messages inside an invalid field or an error notice.

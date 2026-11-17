@@ -14,6 +14,10 @@ import ListingScreen from '../../app/listings/[id]';
 import MyListingsScreen from '../../app/listings/index';
 import OpeningHoursScreen from '../../app/vendor/hours';
 import OfferScreen from '../../app/offers/[id]';
+import ReservationScreen from '../../app/reservations/[id]';
+import MyReservationsScreen from '../../app/reservations/index';
+import ProfileScreen from '../../app/profile';
+import PayScreen from '../../app/pay/[id]';
 
 export function renderApp(initialUrl = '/') {
   return renderRouter(
@@ -32,6 +36,10 @@ export function renderApp(initialUrl = '/') {
       'listings/index': MyListingsScreen,
       'vendor/hours': OpeningHoursScreen,
       'offers/[id]': OfferScreen,
+      'reservations/[id]': ReservationScreen,
+      'reservations/index': MyReservationsScreen,
+      profile: ProfileScreen,
+      'pay/[id]': PayScreen,
     },
     { initialUrl },
   );
