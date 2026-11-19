@@ -301,7 +301,9 @@
       "afterLimit": "Pickup must end by {{time}}, the food's estimated limit. Choose an earlier end time.",
       "name": "Enter the name (up to 80 characters).",
       "description": "Write a description (up to 300 characters).",
-      "branch": "Choose the branch where the food is picked up."
+      "branch": "Choose the branch where the food is picked up.",
+      "startPast": "This time has already passed. Choose a pickup start from now on.",
+      "startTooFar": "Choose a pickup start within the next {{days}} days."
     },
     "problems": {
       "uploadFailed": "The photo could not be uploaded. Everything you entered is kept. Check your connection and tap Retry.",
@@ -314,7 +316,9 @@
       "notFound": "This listing was not found.",
       "notReady": "Choose where the food should go before publishing.",
       "hoursRequired": "Set your shop's opening hours before you post food. Customers can only collect while the shop is open.",
-      "informalVendor": "Create listing is only for formal vendors. Use Quick Post instead."
+      "informalVendor": "Create listing is only for formal vendors. Use Quick Post instead.",
+      "startPassed": "This draft's pickup start has passed, so it cannot be published. Create the listing again with a new time.",
+      "startTooFar": "This draft's pickup start is too far ahead, so it cannot be published. Create the listing again with a nearer time."
     },
     "publishNeeds": "Choose where the food should go before publishing.",
     "shopHours": "Shop hours: {{opensAt}}–{{closesAt}}",
@@ -625,5 +629,33 @@
       "invalid": "Enter the 6-digit code the customer shows you."
     },
     "summaryLeft": "{{counts}} · {{available}} left"
+  },
+  "rejection": {
+    "reasonLabel": "Reason for rejecting",
+    "reasons": {
+      "wrong_location": "Wrong or unclear location",
+      "wrong_contact": "Missing or wrong contact details",
+      "not_food_business": "Not a food business",
+      "duplicate_account": "Duplicate account",
+      "other": "Other"
+    },
+    "noteLabel": "Note to the applicant (optional)",
+    "noteLabelRequired": "Note to the applicant",
+    "noteHint": "Up to {{max}} characters. The applicant sees it.",
+    "reasonRequired": "Choose a reason.",
+    "noteRequired": "Write a note when the reason is Other.",
+    "noteTooLong": "The note can be at most {{max}} characters.",
+    "reapplied": "Reapplied",
+    "reappliedDetails": "Reapplied. Last rejected for: {{reason}}.",
+    "reappliedNote": "Note: {{note}}",
+    "yourReason": "Reason: {{reason}}",
+    "yourNote": "Note from the team: {{note}}",
+    "support": "Questions? Contact {{email}}",
+    "fixAndSend": "Fix and send again",
+    "reapplyIntro": "Fix your application and send it again. Your email or phone number and password stay the same.",
+    "sendAgain": "Send again",
+    "sending": "Sending…",
+    "notRejected": "Your application is no longer Rejected, so it cannot be sent again.",
+    "loadFailed": "Your application could not be loaded. Try again."
   }
 }

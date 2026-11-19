@@ -21,6 +21,8 @@ interface DateTimeFieldProps {
   testID?: string;
   /** Shown while nothing is chosen, for example "Now" (D-75); otherwise "Choose a time". */
   emptyText?: string;
+  /** D-104: when given, the picker offers only from now to this many days ahead (the server checks it too). */
+  maxDaysAhead?: number;
 }
 
 export function DateTimeField({
@@ -32,11 +34,14 @@ export function DateTimeField({
   disabled = false,
   testID,
   emptyText,
+  maxDaysAhead,
 }: DateTimeFieldProps) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   // Android shows the date first, then the time; iOS shows both at once.
   const [step, setStep] = useState<'closed' | 'date' | 'time' | 'datetime'>('closed');
+  // D-104: the allowed days, worked out when the picker opens.
+  const [limits, setLimits] = useState<{ min: Date; max: Date } | null>(null);
   const current = value === null ? new Date() : new Date(value);
   const invalid = error !== undefined;
 
@@ -68,6 +73,10 @@ export function DateTimeField({
         accessibilityHint={invalid ? error : (hint ?? t('listing.pickTime'))}
         accessibilityState={{ disabled }}
         onPress={() => {
+          if (maxDaysAhead !== undefined) {
+            const now = Date.now();
+            setLimits({ min: new Date(now), max: new Date(now + maxDaysAhead * 24 * 60 * 60_000) });
+          }
           setStep(Platform.OS === 'ios' ? (step === 'closed' ? 'datetime' : 'closed') : 'date');
         }}
         style={[styles.box, invalid && styles.boxInvalid, disabled && styles.boxDisabled]}
@@ -86,6 +95,8 @@ export function DateTimeField({
           mode={step}
           display={Platform.OS === 'ios' ? 'inline' : 'default'}
           onChange={picked}
+          minimumDate={limits?.min}
+          maximumDate={limits?.max}
           locale={language === 'ar' ? 'ar-EG' : 'en-GB'}
         />
       ) : null}

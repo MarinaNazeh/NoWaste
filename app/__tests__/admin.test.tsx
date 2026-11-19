@@ -39,6 +39,7 @@ const vendorApplication: Application = {
     longitude: 31.2122,
   },
   partnerProfile: null,
+  lastRejection: null,
 };
 
 const partnerApplication: Application = {
@@ -58,6 +59,7 @@ const partnerApplication: Application = {
     latitude: 30.0131,
     longitude: 31.2089,
   },
+  lastRejection: null,
 };
 
 beforeEach(async () => {
@@ -155,10 +157,14 @@ describe('FR-ACC-07 pending applications on the app', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
     expect(mockedDecide).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole('button', { name: 'Reject' }));
+    // D-105: a reason is chosen first.
+    await fireEvent.press(screen.getByRole('radio', { name: 'Duplicate account' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Yes, reject' }));
 
     expect(await screen.findByText('Application rejected.')).toBeOnTheScreen();
-    expect(mockedDecide).toHaveBeenCalledWith('admin-token', 'p1', 'reject');
+    expect(mockedDecide).toHaveBeenCalledWith('admin-token', 'p1', 'reject', {
+      reason: 'duplicate_account',
+    });
   });
 
   test('FR-ACC-07 an application already decided by someone else is explained (409)', async () => {
@@ -168,6 +174,7 @@ describe('FR-ACC-07 pending applications on the app', () => {
     await screen.findByTestId('application-details');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Reject' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Duplicate account' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Yes, reject' }));
 
     expect(

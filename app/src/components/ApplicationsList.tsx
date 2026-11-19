@@ -102,6 +102,12 @@ export function ApplicationsList() {
               {type}
             </AppText>
             <AppText variant="caption">{address}</AppText>
+            {/* D-105: sent again after a rejection. */}
+            {application.lastRejection !== null ? (
+              <AppText variant="caption" color="primary">
+                {t('rejection.reapplied')}
+              </AppText>
+            ) : null}
           </Pressable>
         );
       })}

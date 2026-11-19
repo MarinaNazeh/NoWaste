@@ -7,7 +7,9 @@
 // Vendors and partners also choose their login details with the US-01 rules. Invalid fields are marked (E-ACC-02,
 // IF-UI-06); an already registered email or phone offers Log in and Reset password (E-ACC-01). The same shared
 // validators run here and on the server.
-import { useState } from 'react';
+// D-105: with ?reapply=1 a rejected vendor or partner fixes their application: the form is filled in with what they
+// sent, the login details are not shown (they stay the same), and Send again makes the application Pending again.
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +19,7 @@ import {
   PARTNER_ROLES,
   TEXT_LIMITS,
   type AcceptedFoodType,
+  validateApplication,
   validateRegistration,
   validateSignUp,
   type PartnerRole,
@@ -24,7 +27,16 @@ import {
   type VendorType,
   type BranchField,
 } from '@nowaste/shared';
-import { registerConsumer, submitApplication, type ApplicationRequest } from '@/api/client';
+import {
+  getMyApplication,
+  registerConsumer,
+  sendApplicationAgain,
+  submitApplication,
+  type ApplicationRequest,
+  type MyApplication,
+  type ResendRequest,
+} from '@/api/client';
+import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { BranchForm, EMPTY_BRANCH, branchBody, type BranchDraft } from '@/components/BranchForm';
@@ -42,15 +54,23 @@ import { useLanguage } from '@/i18n/LanguageProvider';
 import { spacing } from '@/theme';
 
 type Method = 'email' | 'phone';
-type Problem = 'unreachable' | 'unexpected';
+type Problem = 'unreachable' | 'unexpected' | 'notRejected' | 'loadFailed';
+
+/** D-105: the contact as the vendor typed it ("010…"), from the stored +20 form. */
+function localPhone(stored: string): string {
+  return stored.startsWith('+20') ? `0${stored.slice(3)}` : stored;
+}
 
 export default function RegisterScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { language } = useLanguage();
 
-  const { role } = useLocalSearchParams<{ role?: string }>();
+  const { role, reapply } = useLocalSearchParams<{ role?: string; reapply?: string }>();
   const form = role === 'vendor' ? 'vendor' : role === 'partner' ? 'partner' : 'consumer';
+  // D-105: sending a rejected application again (logged in).
+  const { token, signIn } = useAuth();
+  const reapplying = reapply === '1' && form !== 'consumer';
   // A partner says which kind on this screen; nothing is chosen at the start.
   const [partnerType, setPartnerType] = useState<PartnerRole | null>(null);
   const [method, setMethod] = useState<Method>('email');
@@ -77,6 +97,58 @@ export default function RegisterScreen() {
   const [otherFoodType, setOtherFoodType] = useState('');
   const [pin, setPin] = useState<Coordinates | null>(null);
   const [address, setAddress] = useState('');
+
+  // D-105: fill the form in with the application as it was sent.
+  useEffect(() => {
+    if (!reapplying || token === null) return;
+    let active = true;
+    void getMyApplication(token)
+      .then((result) => {
+        if (!active) return;
+        if (result.kind === 'ok') fillIn(result.application);
+        else setProblem('loadFailed');
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [reapplying, token]);
+
+  function fillIn(application: MyApplication) {
+    const vendor = application.vendorProfile;
+    const partner = application.partnerProfile;
+    const place = vendor ?? partner;
+    if (place !== null) {
+      setAddress(place.address);
+      setPin({ latitude: place.latitude, longitude: place.longitude });
+    }
+    if (vendor !== null) {
+      setShopName(vendor.shopName);
+      setVendorType(vendor.vendorType);
+      setContact(localPhone(vendor.contact));
+      setDescription(vendor.description ?? '');
+      setOpensAt(vendor.opensAt ?? '');
+      setClosesAt(vendor.closesAt ?? '');
+      setBranches(
+        vendor.branches.map((branch) => ({
+          address: branch.address,
+          pin: { latitude: branch.latitude, longitude: branch.longitude },
+          opensAt: branch.opensAt,
+          closesAt: branch.closesAt,
+        })),
+      );
+    }
+    if (partner !== null) {
+      setPartnerType(partner.partnerType);
+      setOrganisationName(partner.organisationName);
+      setOtherPartnerType(partner.otherPartnerType ?? '');
+      setFoodTypes([
+        ...partner.acceptedFoodTypes,
+        ...(partner.otherFoodType !== null ? [OTHER_FOOD_TYPE] : []),
+      ]);
+      setOtherFoodType(partner.otherFoodType ?? '');
+    }
+  }
 
   const isConsumer = form === 'consumer';
   const isPartner = form === 'partner';
@@ -134,11 +206,15 @@ export default function RegisterScreen() {
       password,
       language,
     };
+    return { ...login, ...profileBody() };
+  }
+
+  /** The vendor or partner details without the login details (D-105 sends only these again). */
+  function profileBody(): ResendRequest {
     // Without a pin the coordinates are left out, so the validator marks the location.
     const where = { address, latitude: pin?.latitude as number, longitude: pin?.longitude as number };
     if (form === 'vendor') {
       return {
-        ...login,
         role: 'vendor',
         vendorProfile: {
           shopName,
@@ -154,7 +230,6 @@ export default function RegisterScreen() {
       };
     }
     return {
-      ...login,
       // Until a kind is chosen the other fields are still checked as for a charity; submit() adds `role`.
       role: partnerType ?? 'charity',
       partnerProfile: {
@@ -173,6 +248,11 @@ export default function RegisterScreen() {
     setDuplicate(null);
     setProblem(null);
     setShowResetNote(false);
+
+    if (reapplying) {
+      await sendAgain();
+      return;
+    }
 
     if (!isConsumer) {
       const application = applicationBody();
@@ -207,14 +287,58 @@ export default function RegisterScreen() {
     showResult(result, '/registered');
   }
 
+  /** D-105: the fixed application, sent again; the account is Pending again and the home shows it. */
+  async function sendAgain() {
+    if (token === null) return;
+    const body = profileBody();
+    const check = validateApplication(body);
+    const missingType = isPartner && partnerType === null;
+    if (!check.ok || missingType) {
+      setInvalid([...(missingType ? (['role'] as const) : []), ...(check.ok ? [] : check.fields)]);
+      return;
+    }
+    setInvalid([]);
+    setSubmitting(true);
+    const result = await sendApplicationAgain(token, body);
+    setSubmitting(false);
+    switch (result.kind) {
+      case 'ok':
+        await signIn(token, result.user);
+        router.replace('/home');
+        break;
+      case 'invalid':
+        setInvalid(result.fields);
+        break;
+      case 'notRejected':
+        setProblem('notRejected');
+        break;
+      case 'unreachable':
+        setProblem('unreachable');
+        break;
+      default:
+        setProblem('unexpected');
+    }
+  }
+
+  const problemText =
+    problem === 'unreachable'
+      ? t('errors.unreachable')
+      : problem === 'notRejected'
+        ? t('rejection.notRejected')
+        : problem === 'loadFailed'
+          ? t('rejection.loadFailed')
+          : t('errors.unexpected');
+
   return (
     <Screen scroll>
       <AppText color="textMuted">
-        {isConsumer
-          ? t('register.intro')
-          : isPartner
-            ? t('register.introPartner')
-            : t('register.introVendor')}
+        {reapplying
+          ? t('rejection.reapplyIntro')
+          : isConsumer
+            ? t('register.intro')
+            : isPartner
+              ? t('register.introPartner')
+              : t('register.introVendor')}
       </AppText>
 
       {invalid.length > 0 ? (
@@ -256,13 +380,7 @@ export default function RegisterScreen() {
         </Notice>
       ) : null}
 
-      {problem !== null ? (
-        <Notice
-          testID="register-problem"
-          tone="error"
-          message={problem === 'unreachable' ? t('errors.unreachable') : t('errors.unexpected')}
-        />
-      ) : null}
+      {problem !== null ? <Notice testID="register-problem" tone="error" message={problemText} /> : null}
 
       {form === 'vendor' ? (
         <>
@@ -542,96 +660,113 @@ export default function RegisterScreen() {
         />
       ) : null}
 
-      {!isConsumer ? (
+      {!isConsumer && !reapplying ? (
         <AppText variant="heading" accessibilityRole="header">
           {t('register.accountSection')}
         </AppText>
       ) : null}
 
-      <View style={styles.group}>
-        <AppText variant="label">{t('register.methodLabel')}</AppText>
-        <SegmentedControl<Method>
-          options={[
-            { value: 'email', label: t('register.methodEmail') },
-            { value: 'phone', label: t('register.methodPhone') },
-          ]}
-          value={method}
-          onChange={(next) => {
-            setMethod(next);
-            setIdentifier('');
-            setDuplicate(null);
-            setInvalid((fields) => fields.filter((f) => f !== 'email' && f !== 'phone'));
-          }}
-          accessibilityLabel={t('register.methodLabel')}
-        />
-      </View>
+      {/* D-105: the login details stay the same when a rejected application is sent again. */}
+      {reapplying ? null : (
+        <>
+          <View style={styles.group}>
+            <AppText variant="label">{t('register.methodLabel')}</AppText>
+            <SegmentedControl<Method>
+              options={[
+                { value: 'email', label: t('register.methodEmail') },
+                { value: 'phone', label: t('register.methodPhone') },
+              ]}
+              value={method}
+              onChange={(next) => {
+                setMethod(next);
+                setIdentifier('');
+                setDuplicate(null);
+                setInvalid((fields) => fields.filter((f) => f !== 'email' && f !== 'phone'));
+              }}
+              accessibilityLabel={t('register.methodLabel')}
+            />
+          </View>
 
-      {method === 'email' ? (
-        <TextField
-          key="email"
-          testID="register-email"
-          label={t('register.emailLabel')}
-          placeholder={t('register.emailPlaceholder')}
-          value={identifier}
-          onChangeText={(text) => {
-            setIdentifier(text);
-            clearField('email');
-          }}
-          error={identifierError()}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="email"
-          textContentType="emailAddress"
-          returnKeyType="next"
-        />
-      ) : (
-        <TextField
-          key="phone"
-          testID="register-phone"
-          label={t('register.phoneLabel')}
-          placeholder={t('register.phonePlaceholder')}
-          hint={t('register.phoneHint')}
-          value={identifier}
-          onChangeText={(text) => {
-            setIdentifier(text);
-            clearField('phone');
-          }}
-          error={identifierError()}
-          keyboardType="phone-pad"
-          autoComplete="tel"
-          textContentType="telephoneNumber"
-          maxLength={11}
-          returnKeyType="next"
-        />
+          {method === 'email' ? (
+            <TextField
+              key="email"
+              testID="register-email"
+              label={t('register.emailLabel')}
+              placeholder={t('register.emailPlaceholder')}
+              value={identifier}
+              onChangeText={(text) => {
+                setIdentifier(text);
+                clearField('email');
+              }}
+              error={identifierError()}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="next"
+            />
+          ) : (
+            <TextField
+              key="phone"
+              testID="register-phone"
+              label={t('register.phoneLabel')}
+              placeholder={t('register.phonePlaceholder')}
+              hint={t('register.phoneHint')}
+              value={identifier}
+              onChangeText={(text) => {
+                setIdentifier(text);
+                clearField('phone');
+              }}
+              error={identifierError()}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+              maxLength={11}
+              returnKeyType="next"
+            />
+          )}
+
+          <TextField
+            testID="register-password"
+            label={t('register.passwordLabel')}
+            value={password}
+            onChangeText={(text) => {
+              setPassword(text);
+              clearField('password');
+            }}
+            error={invalid.includes('password') ? t('errors.passwordInvalid') : undefined}
+            password
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              void submit();
+            }}
+            below={<PasswordRules password={password} showErrors={invalid.includes('password')} />}
+          />
+        </>
       )}
-
-      <TextField
-        testID="register-password"
-        label={t('register.passwordLabel')}
-        value={password}
-        onChangeText={(text) => {
-          setPassword(text);
-          clearField('password');
-        }}
-        error={invalid.includes('password') ? t('errors.passwordInvalid') : undefined}
-        password
-        autoCapitalize="none"
-        autoCorrect={false}
-        autoComplete="new-password"
-        textContentType="newPassword"
-        returnKeyType="done"
-        onSubmitEditing={() => {
-          void submit();
-        }}
-        below={<PasswordRules password={password} showErrors={invalid.includes('password')} />}
-      />
 
       <View style={styles.submit}>
         <Button
           testID="register-submit"
-          label={isConsumer ? t('register.submit') : t('register.submitApplication')}
-          busyLabel={isConsumer ? t('register.submitting') : t('register.submittingApplication')}
+          label={
+            reapplying
+              ? t('rejection.sendAgain')
+              : isConsumer
+                ? t('register.submit')
+                : t('register.submitApplication')
+          }
+          busyLabel={
+            reapplying
+              ? t('rejection.sending')
+              : isConsumer
+                ? t('register.submitting')
+                : t('register.submittingApplication')
+          }
           busy={submitting}
           onPress={() => {
             void submit();

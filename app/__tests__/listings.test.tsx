@@ -109,6 +109,8 @@ const SHOP: Shop = {
   opensAt: '00:00',
   closesAt: '23:59',
   branches: [MAIN],
+  // D-104: the pickup start limits.
+  pickupStartRule: { maxDaysAhead: 7, pastGraceMinutes: 5 },
 };
 
 const T = {
@@ -1080,5 +1082,95 @@ describe('NFR-06 IF-UI-03 the listing screens in Arabic', () => {
   test('NFR-05a D-74 the allowed pickup window is labelled as an Estimate in both languages', () => {
     expect(en.listing.pickWindowValue).toMatch(/^Estimate/);
     expect(ar.listing.pickWindowValue).toMatch(/^تقدير/);
+  });
+});
+
+// D-104 (2026-11-17): the pickup start is from now up to 7 days ahead. The picker offers only those days and the
+// server's answer is shown on the pickup start; a Draft whose start has passed is not published.
+describe('E-LST-04 D-104 the pickup start is from now to 7 days ahead', () => {
+  test('FR-LST-01 D-104 the full listing pickup start picker offers only the next 7 days', async () => {
+    await openForm();
+
+    expect(field('Pickup starts').props.maxDaysAhead).toBe(7);
+  });
+
+  test('E-LST-04 D-104 a past pickup start (server answer) is marked on the pickup start', async () => {
+    mocked.create.mockResolvedValue({ kind: 'invalid', fields: ['pickupStart'], startReason: 'past' });
+    await openForm();
+    await fillForm();
+    await save();
+
+    await waitFor(() => {
+      expect(field('Pickup starts').props.accessibilityHint).toBe(
+        'This time has already passed. Choose a pickup start from now on.',
+      );
+    });
+  });
+
+  test('E-LST-04 D-104 a past pickup start in the pick-by preview is marked at once', async () => {
+    mocked.preview.mockResolvedValue({ kind: 'invalid', fields: ['pickupStart'], startReason: 'past' });
+    await openForm();
+    await fillForm();
+
+    await waitFor(() => {
+      expect(field('Pickup starts').props.accessibilityHint).toBe(
+        'This time has already passed. Choose a pickup start from now on.',
+      );
+    });
+  });
+
+  test('E-LST-04 D-104 a Draft whose pickup start has passed is not published and the vendor is told why', async () => {
+    const ready = listing({
+      perishabilityCategory: 'Highly perishable',
+      urgency: { collectBy: T.end },
+      listingType: 'Discounted Surplus Bag',
+    });
+    mocked.get.mockResolvedValue({ kind: 'ok', listing: ready });
+    jest.mocked(chooseDestination).mockResolvedValue({ kind: 'ok', listing: ready });
+    mocked.publish.mockResolvedValue({ kind: 'startPassed' });
+    await openForm();
+    await fillForm();
+    await save();
+    await screen.findByTestId('listing-status');
+    await fireEvent.press(await screen.findByRole('radio', { name: 'Consumers (Discounted Surplus Bag)' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled();
+    });
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Publish' }));
+
+    expect(
+      await screen.findByText(
+        "This draft's pickup start has passed, so it cannot be published. Create the listing again with a new time.",
+      ),
+    ).toBeOnTheScreen();
+  });
+
+  test('FR-LST-02 D-104 the Quick Post pickup start picker offers only the next 7 days', async () => {
+    mocked.getShop.mockResolvedValue({ kind: 'ok', shop: { ...SHOP, vendorType: 'informal' } });
+    await openQuickPost();
+
+    await waitFor(() => {
+      expect(field('Pickup starts').props.maxDaysAhead).toBe(7);
+    });
+  });
+
+  test('E-LST-04 D-104 a Quick Post start too far ahead (server answer) says the limit', async () => {
+    mocked.getShop.mockResolvedValue({ kind: 'ok', shop: { ...SHOP, vendorType: 'informal' } });
+    mocked.quick.mockResolvedValue({
+      kind: 'invalid',
+      fields: ['pickupStart'],
+      startReason: 'too_far',
+      maxDaysAhead: 7,
+    });
+    await openQuickPost();
+    await fillQuickPost();
+    await postNow();
+
+    await waitFor(() => {
+      expect(field('Pickup starts').props.accessibilityHint).toBe(
+        'Choose a pickup start within the next 7 days.',
+      );
+    });
   });
 });

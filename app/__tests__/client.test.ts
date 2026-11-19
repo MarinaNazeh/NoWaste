@@ -3,6 +3,8 @@
 import {
   decideApplication,
   getMe,
+  getMyApplication,
+  sendApplicationAgain,
   getMyListings,
   getNearbyOffers,
   getOffer,
@@ -10,6 +12,8 @@ import {
   listApplications,
   login,
   logout,
+  createListing,
+  publishListing,
 } from '@/api/client';
 
 const mockDownload = jest.fn<Promise<unknown>, unknown[]>();
@@ -223,5 +227,65 @@ describe('FR-RES-01 consumer offers (D-65)', () => {
     const [url, destination] = mockDownload.mock.calls[0] as [string, { parts: unknown[] }];
     expect(url).toBe('http://api.test/listings/nearby/o1/photo');
     expect(destination.parts).toEqual(['cache-dir', 'offer-photo-o1.jpg']);
+  });
+});
+
+describe('E-LST-04 D-104 pickup start limits', () => {
+  test('E-LST-04 D-104 a refused pickup start gives the reason and the limit', async () => {
+    answer(400, { error: 'E-LST-04', fields: ['pickupStart'], reason: 'too_far', maxDaysAhead: 7 });
+
+    expect(await createListing('vendor-token', {} as never)).toEqual({
+      kind: 'invalid',
+      fields: ['pickupStart'],
+      startReason: 'too_far',
+      maxDaysAhead: 7,
+    });
+  });
+
+  test('E-LST-04 D-104 publishing a Draft whose start has passed is read as startPassed', async () => {
+    answer(400, { error: 'E-LST-04', fields: ['pickupStart'], reason: 'past' });
+
+    expect(await publishListing('vendor-token', 'l1')).toEqual({ kind: 'startPassed' });
+  });
+});
+
+describe('FR-ACC-07 D-105 rejection reason and sending an application again', () => {
+  test('FR-ACC-07 D-105 decideApplication sends the reason and the note when rejecting', async () => {
+    answer(200, { userId: 'v1', status: 'Rejected' });
+    answer(400, { error: 'invalid_input', fields: ['note'] });
+
+    expect(
+      await decideApplication('admin', 'v1', 'reject', { reason: 'other', note: 'Opening hours look wrong' }),
+    ).toEqual({ kind: 'ok', status: 'Rejected' });
+    expect(JSON.parse(sent(0).init.body as string)).toEqual({
+      reason: 'other',
+      note: 'Opening hours look wrong',
+    });
+    expect(await decideApplication('admin', 'v1', 'reject', { reason: 'other' })).toEqual({
+      kind: 'invalid',
+      fields: ['note'],
+    });
+  });
+
+  test('FR-ACC-02 D-105 getMyApplication reads GET /users/me/application', async () => {
+    const application = { role: 'vendor', status: 'Rejected', rejection: { reason: 'wrong_location' } };
+    answer(200, application);
+
+    expect(await getMyApplication('vendor-token')).toEqual({ kind: 'ok', application });
+    expect(sent().url).toBe('http://api.test/users/me/application');
+  });
+
+  test('FR-ACC-02 D-105 sendApplicationAgain reads 200, 400 E-ACC-02 and 409 not_rejected', async () => {
+    const user = { id: 'v1', role: 'vendor', status: 'Pending', language: 'en' };
+    answer(200, user);
+    answer(400, { error: 'E-ACC-02', fields: ['shopName'] });
+    answer(409, { error: 'not_rejected', status: 'Approved' });
+    const body = { role: 'vendor', vendorProfile: {} } as never;
+
+    expect(await sendApplicationAgain('t', body)).toEqual({ kind: 'ok', user });
+    expect(await sendApplicationAgain('t', body)).toEqual({ kind: 'invalid', fields: ['shopName'] });
+    expect(await sendApplicationAgain('t', body)).toEqual({ kind: 'notRejected', status: 'Approved' });
+    expect(sent(0).url).toBe('http://api.test/users/me/application');
+    expect(sent(0).init.method).toBe('POST');
   });
 });

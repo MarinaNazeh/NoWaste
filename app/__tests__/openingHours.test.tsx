@@ -69,6 +69,8 @@ function shop(overrides: Partial<Shop> = {}, extraBranches: Branch[] = []): Shop
     longitude: 31.2122,
     opensAt: '09:00',
     closesAt: '22:00',
+    // D-104: the pickup start limits.
+    pickupStartRule: { maxDaysAhead: 7, pastGraceMinutes: 5 },
     ...overrides,
   };
   const main: Branch = {

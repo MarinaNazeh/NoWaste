@@ -8,6 +8,7 @@ import type {
   PartnerProfile,
   PartnerRole,
   RegistrationField,
+  RejectionReason,
   SignUpField,
   VendorProfile,
 } from '@nowaste/shared';
@@ -252,6 +253,15 @@ export interface Application {
     latitude: number;
     longitude: number;
   } | null;
+  /** D-105: the newest rejection; on a Pending application it means the applicant sent it again. */
+  lastRejection: LastRejection | null;
+}
+
+/** D-105: why an application was rejected. */
+export interface LastRejection {
+  reason: RejectionReason;
+  note: string | null;
+  rejectedAt: string;
 }
 
 /** GET /admin/applications?status=… (US-07). */
@@ -272,16 +282,102 @@ export async function decideApplication(
   token: string,
   userId: string,
   decision: 'approve' | 'reject',
-): Promise<Protected<{ kind: 'ok'; status: AccountStatus } | { kind: 'conflict'; status: AccountStatus }>> {
+  /** D-105: a rejection carries the reason and an optional note. */
+  rejection?: { reason: RejectionReason; note?: string },
+): Promise<
+  Protected<
+    | { kind: 'ok'; status: AccountStatus }
+    | { kind: 'conflict'; status: AccountStatus }
+    | { kind: 'invalid'; fields: ('reason' | 'note')[] }
+  >
+> {
   const result = await protectedCall(
     `/admin/applications/${encodeURIComponent(userId)}/${decision}`,
-    { method: 'POST' },
+    rejection === undefined ? { method: 'POST' } : { method: 'POST', body: JSON.stringify(rejection) },
     token,
   );
   if (result.kind !== 'response') return result;
   const status = result.data?.status as AccountStatus | undefined;
   if (result.status === 200 && status !== undefined) return { kind: 'ok', status };
   if (result.status === 409 && status !== undefined) return { kind: 'conflict', status };
+  if (result.status === 400 && Array.isArray(result.data?.fields)) {
+    return { kind: 'invalid', fields: result.data.fields as ('reason' | 'note')[] };
+  }
+  return { kind: 'unexpected' };
+}
+
+/** D-105: the applicant's own application (GET /users/me/application). */
+export interface MyApplication {
+  role: AccountRole;
+  status: AccountStatus;
+  vendorProfile:
+    | (Omit<VendorProfile, 'branches' | 'description'> & {
+        description: string | null;
+        opensAt: string | null;
+        closesAt: string | null;
+        branches: {
+          address: string;
+          latitude: number;
+          longitude: number;
+          opensAt: string;
+          closesAt: string;
+        }[];
+      })
+    | null;
+  partnerProfile: {
+    organisationName: string;
+    partnerType: PartnerRole;
+    otherPartnerType: string | null;
+    acceptedFoodTypes: AcceptedFoodType[];
+    otherFoodType: string | null;
+    address: string;
+    latitude: number;
+    longitude: number;
+  } | null;
+  /** Only while the application is Rejected. */
+  rejection: LastRejection | null;
+  supportContact: { email: string };
+}
+
+export async function getMyApplication(
+  token: string,
+): Promise<Protected<{ kind: 'ok'; application: MyApplication }>> {
+  const result = await protectedCall('/users/me/application', {}, token);
+  if (result.kind !== 'response') return result;
+  return result.status === 200 && result.data !== null
+    ? { kind: 'ok', application: result.data as unknown as MyApplication }
+    : { kind: 'unexpected' };
+}
+
+/** D-105: the fixed application without the login details. */
+export type ResendRequest =
+  { role: 'vendor'; vendorProfile: VendorProfile } | { role: PartnerRole; partnerProfile: PartnerProfile };
+
+/** POST /users/me/application: a Rejected application sent again; the account is Pending again. */
+export async function sendApplicationAgain(
+  token: string,
+  body: ResendRequest,
+): Promise<
+  Protected<
+    | { kind: 'ok'; user: SessionUser }
+    | { kind: 'invalid'; fields: SignUpField[] }
+    | { kind: 'notRejected'; status: AccountStatus }
+  >
+> {
+  const result = await protectedCall(
+    '/users/me/application',
+    { method: 'POST', body: JSON.stringify(body) },
+    token,
+  );
+  if (result.kind !== 'response') return result;
+  const data = result.data;
+  if (result.status === 200 && data !== null) return { kind: 'ok', user: data as unknown as SessionUser };
+  if (result.status === 400 && data?.error === 'E-ACC-02' && Array.isArray(data.fields)) {
+    return { kind: 'invalid', fields: data.fields as SignUpField[] };
+  }
+  if (result.status === 409 && data?.error === 'not_rejected') {
+    return { kind: 'notRejected', status: data.status as AccountStatus };
+  }
   return { kind: 'unexpected' };
 }
 
@@ -311,6 +407,18 @@ export interface Shop {
   closesAt: string | null;
   /** D-64: the vendor's branches, the shop itself first. */
   branches: Branch[];
+  /** D-104: the pickup start may be from now up to maxDaysAhead days ahead. */
+  pickupStartRule: { maxDaysAhead: number; pastGraceMinutes: number };
+}
+
+/** D-104: why the server refused a pickup start ('past', or more than maxDaysAhead days ahead). */
+export type StartRefusal = { startReason?: 'past' | 'too_far'; maxDaysAhead?: number };
+
+function startRefusal(data: Record<string, unknown>): StartRefusal {
+  if (data.reason !== 'past' && data.reason !== 'too_far') return {};
+  return typeof data.maxDaysAhead === 'number'
+    ? { startReason: data.reason, maxDaysAhead: data.maxDaysAhead }
+    : { startReason: data.reason };
 }
 
 /** GET /vendors/me: the shop pin (start of the pickup location) and the vendor type (Quick Post). */
@@ -491,13 +599,13 @@ export type QuickPostRequest = {
 export type SaveListingResult = ListingAnswer<
   | { kind: 'ok'; listing: Listing }
   // E-LST-04; with the opening hours when the pickup is outside them (D-62).
-  | {
+  | ({
       kind: 'invalid';
       fields: string[];
       hours?: { opensAt: string; closesAt: string };
       /** NFR-05b: the fields are AI-filled and were not confirmed. */
       unconfirmedAi?: boolean;
-    }
+    } & StartRefusal)
   // E-LST-03; with the latest allowed end when the pickup goes past the food limit (D-61).
   | { kind: 'afterExpiry'; latestPickupEnd?: string }
   | { kind: 'formalVendor' } // Quick Post is for informal vendors only
@@ -517,7 +625,13 @@ async function saveListing(path: string, body: object, token: string): Promise<S
         ? { hours: { opensAt: data.opensAt, closesAt: data.closesAt } }
         : {};
     const unconfirmed = data.unconfirmedAi === true ? { unconfirmedAi: true } : {};
-    return { kind: 'invalid', fields: data.fields as string[], ...hours, ...unconfirmed };
+    return {
+      kind: 'invalid',
+      fields: data.fields as string[],
+      ...hours,
+      ...unconfirmed,
+      ...startRefusal(data),
+    };
   }
   if (result.status === 400 && data?.error === 'E-LST-03') {
     return typeof data.latestPickupEnd === 'string'
@@ -566,7 +680,7 @@ export async function previewPickBy(
 ): Promise<
   ListingAnswer<
     | { kind: 'ok'; preview: PickByPreview }
-    | { kind: 'invalid'; fields: string[]; hours?: { opensAt: string; closesAt: string } }
+    | ({ kind: 'invalid'; fields: string[]; hours?: { opensAt: string; closesAt: string } } & StartRefusal)
     | { kind: 'hoursRequired' }
   >
 > {
@@ -586,7 +700,7 @@ export async function previewPickBy(
       typeof data.opensAt === 'string' && typeof data.closesAt === 'string'
         ? { hours: { opensAt: data.opensAt, closesAt: data.closesAt } }
         : {};
-    return { kind: 'invalid', fields: data.fields as string[], ...hours };
+    return { kind: 'invalid', fields: data.fields as string[], ...hours, ...startRefusal(data) };
   }
   if (result.status === 409 && data?.error === 'opening_hours_required') return { kind: 'hoursRequired' };
   return { kind: 'unexpected' };
@@ -711,7 +825,16 @@ export async function downloadListingPhoto(
 export async function publishListing(
   token: string,
   id: string,
-): Promise<ListingAnswer<{ kind: 'ok'; listing: Listing } | { kind: 'notDraft' } | { kind: 'notReady' }>> {
+): Promise<
+  ListingAnswer<
+    | { kind: 'ok'; listing: Listing }
+    | { kind: 'notDraft' }
+    | { kind: 'notReady' }
+    // D-104: the Draft's pickup start has passed (or is too far ahead), so it is not published.
+    | { kind: 'startPassed' }
+    | { kind: 'startTooFar' }
+  >
+> {
   const result = await protectedCall(
     `/listings/${encodeURIComponent(id)}/publish`,
     { method: 'POST' },
@@ -721,6 +844,9 @@ export async function publishListing(
   if (notApproved(result)) return { kind: 'notApproved' };
   // US-18, US-19: the category must be confirmed and a destination chosen first.
   if (result.status === 409 && result.data?.error === 'not_ready_to_publish') return { kind: 'notReady' };
+  if (result.status === 400 && result.data?.error === 'E-LST-04') {
+    return result.data.reason === 'too_far' ? { kind: 'startTooFar' } : { kind: 'startPassed' };
+  }
   if (result.status === 409) return { kind: 'notDraft' };
   return result.status === 200 && result.data !== null
     ? { kind: 'ok', listing: result.data as unknown as Listing }

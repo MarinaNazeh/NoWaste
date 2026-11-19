@@ -247,7 +247,26 @@ function validateSignUp(input) {
     return { ok: false, fields };
   }
 
-  const value = { ...account.value, role, vendorProfile: null, partnerProfile: null };
+  return { ok: true, value: { ...account.value, ...applicationValue(role, input) } };
+}
+
+/**
+ * D-105: a vendor or partner application without the login details, for sending a rejected application again. The
+ * same checks as the sign-up (validateSignUp); the role must be vendor or a partner role.
+ */
+function validateApplication(input) {
+  const role = input.role;
+  const fields = [];
+  if (role === 'vendor') checkVendorProfile(asObject(input.vendorProfile), fields);
+  else if (PARTNER_ROLES.includes(role)) checkPartnerProfile(asObject(input.partnerProfile), role, fields);
+  else return { ok: false, fields: ['role'] };
+  if (fields.length > 0) return { ok: false, fields };
+  return { ok: true, value: applicationValue(role, input) };
+}
+
+/** The checked profile of a role, trimmed and in stored form. */
+function applicationValue(role, input) {
+  const value = { role, vendorProfile: null, partnerProfile: null };
   if (role === 'vendor') {
     const p = input.vendorProfile;
     value.vendorProfile = {
@@ -278,7 +297,29 @@ function validateSignUp(input) {
       otherFoodType: p.acceptedFoodTypes.includes(OTHER_FOOD_TYPE) ? p.otherFoodType.trim() : null,
     };
   }
-  return { ok: true, value };
+  return value;
+}
+
+// D-105: why the administrator rejected an application. The note is optional, but required for Other.
+const REJECTION_REASONS = Object.freeze([
+  'wrong_location',
+  'wrong_contact',
+  'not_food_business',
+  'duplicate_account',
+  'other',
+]);
+const REJECTION_NOTE_MAX = TEXT_LIMITS.description;
+
+/** D-105: checks a rejection {reason, note}; the note is trimmed, and null when missing or blank. */
+function validateRejection(input) {
+  const body = asObject(input);
+  if (!REJECTION_REASONS.includes(body.reason)) return { ok: false, fields: ['reason'] };
+  const note = body.note;
+  if (note !== undefined && note !== null && typeof note !== 'string') return { ok: false, fields: ['note'] };
+  const trimmed = typeof note === 'string' && note.trim() !== '' ? note.trim() : null;
+  if (trimmed !== null && [...trimmed].length > REJECTION_NOTE_MAX) return { ok: false, fields: ['note'] };
+  if (body.reason === 'other' && trimmed === null) return { ok: false, fields: ['note'] };
+  return { ok: true, value: { reason: body.reason, note: trimmed } };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -460,7 +501,8 @@ function validateOfferFilters(input, now) {
   const maxPrice = input.maxPrice === undefined ? null : input.maxPrice;
   if (maxPrice !== null && !isPositiveAmount(maxPrice)) fields.push('maxPrice');
   const pickupBy = input.pickupBy === undefined ? null : parseTime(input.pickupBy);
-  if (input.pickupBy !== undefined && (pickupBy === null || pickupBy < now.getTime())) fields.push('pickupBy');
+  if (input.pickupBy !== undefined && (pickupBy === null || pickupBy < now.getTime()))
+    fields.push('pickupBy');
   if (fields.length > 0) return { ok: false, fields };
   return {
     ok: true,
@@ -497,6 +539,17 @@ function parsePickupCode(value, digits) {
   return new RegExp(`^[0-9]{${digits}}$`).test(code) ? code : null;
 }
 
+/**
+ * D-104: whether a pickup start (ms) is allowed at `now` (ms). It may be up to `pastGraceMinutes` in the past (the
+ * time spent filling the form) and at most `maxDaysAhead` days ahead. The values come from the settings row
+ * LISTING-START. Returns 'past', 'too_far' or null when allowed.
+ */
+function pickupStartProblem(start, now, rule) {
+  if (start < now - rule.pastGraceMinutes * 60_000) return 'past';
+  if (start > now + rule.maxDaysAhead * 24 * 60 * 60_000) return 'too_far';
+  return null;
+}
+
 module.exports = {
   PASSWORD_RULES,
   LANGUAGES,
@@ -527,4 +580,9 @@ module.exports = {
   validateOfferFilters,
   validateCardInput,
   parsePickupCode,
+  pickupStartProblem,
+  validateApplication,
+  REJECTION_REASONS,
+  REJECTION_NOTE_MAX,
+  validateRejection,
 };

@@ -42,6 +42,13 @@ describe('settings table (SRS 5.5 business rules)', () => {
     expect(row?.source).toContain('D-89');
   });
 
+  test('E-LST-04 D-104 settings row LISTING-START holds the pickup start limits', async () => {
+    const row = await getSetting('LISTING-START');
+
+    expect(row?.value).toEqual({ max_days_ahead: 7, past_grace_minutes: 5 });
+    expect(row?.source).toContain('D-104');
+  });
+
   test('TBD-5 settings row exists with value null until the team decides it', async () => {
     const row = await getSetting('TBD-5');
 

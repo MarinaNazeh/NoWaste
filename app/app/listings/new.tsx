@@ -98,6 +98,8 @@ export default function NewListingScreen() {
   const [foodCategory, setFoodCategory] = useState<ListingFoodCategory | null>(null);
   const [storage, setStorage] = useState<StorageCondition | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
+  // D-104: the picker offers the pickup start only from now to this many days ahead.
+  const [maxDaysAhead, setMaxDaysAhead] = useState<number | undefined>(undefined);
   const [branchId, setBranchId] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   // US-12: the upload started when the photo was chosen, the AI draft and which AI fields are confirmed.
@@ -124,6 +126,7 @@ export default function NewListingScreen() {
       .then((result) => {
         if (active && result.kind === 'ok') {
           setBranches(result.shop.branches);
+          setMaxDaysAhead(result.shop.pickupStartRule.maxDaysAhead);
           // With one branch there is nothing to choose.
           const only = result.shop.branches.length === 1 ? result.shop.branches[0] : undefined;
           if (only !== undefined) setBranchId((current) => current ?? only.id);
@@ -154,15 +157,17 @@ export default function NewListingScreen() {
       .then((result) => {
         if (!active) return;
         setPreview({ key: previewKey, result: result.kind === 'ok' ? result.preview : null });
-        if (result.kind === 'invalid' && result.hours !== undefined) {
-          setPickupNote({ field: 'pickupStart', message: t('listing.errors.outsideHours', result.hours) });
+        // D-62: the branch is closed then; D-104: the start is in the past or too far ahead.
+        if (result.kind === 'invalid') {
+          const note = pickupNoteFor(result, t, language);
+          if (note !== null) setPickupNote(note);
         }
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [token, previewKey, foodCategory, storage, pickupStart, branchId, photoKey, t]);
+  }, [token, previewKey, foodCategory, storage, pickupStart, branchId, photoKey, t, language]);
 
   // D-81: the main text fields are in the app language and the second ones in the other. When the vendor switches the
   // language after a draft, each text and its Confirmed state move to the field of their own language.
@@ -505,6 +510,7 @@ export default function NewListingScreen() {
           testID="listing-pickup-start"
           label={t('listing.pickupStartLabel')}
           value={pickupStart}
+          maxDaysAhead={maxDaysAhead}
           onChange={(iso) => {
             setPickupStart(iso);
             setPickupNote(null);

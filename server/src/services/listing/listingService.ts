@@ -7,12 +7,14 @@
 // time. Full listings are for formal vendors; informal vendors use Quick Post.
 // Only Approved vendors reach these functions (E-LST-06, checked by the API layer).
 import {
+  pickupStartProblem,
   validateBranch,
   validateListing,
   validateOpeningHours,
   validateQuickPost,
   type Language,
   type ListingInput,
+  type PickupStartRule,
 } from '@nowaste/shared';
 import { getStorage, type PhotoType } from '../../adapters/storage/storage.js';
 import { SrsError } from '../../domain/errors.js';
@@ -141,6 +143,38 @@ async function localTimeZone(): Promise<string> {
   return value.time_zone;
 }
 
+/** D-104: the pickup start limits (settings row LISTING-START). */
+async function pickupStartRule(): Promise<PickupStartRule> {
+  const value = (await getSetting('LISTING-START'))?.value as
+    | { max_days_ahead?: unknown; past_grace_minutes?: unknown }
+    | null
+    | undefined;
+  if (typeof value?.max_days_ahead !== 'number' || typeof value.past_grace_minutes !== 'number') {
+    throw new Error('Settings row LISTING-START is missing');
+  }
+  return { maxDaysAhead: value.max_days_ahead, pastGraceMinutes: value.past_grace_minutes };
+}
+
+/**
+ * D-104: the pickup start may not be in the past (beyond the grace) nor more than the allowed days ahead: 400 E-LST-04
+ * on pickupStart with the reason, and the limit for 'too_far'.
+ */
+async function checkPickupStart(start: Date): Promise<void> {
+  const rule = await pickupStartRule();
+  const problem = pickupStartProblem(start.getTime(), clock.now().getTime(), rule);
+  if (problem === 'past') {
+    throw new SrsError(400, { error: 'E-LST-04', fields: ['pickupStart'], reason: 'past' });
+  }
+  if (problem === 'too_far') {
+    throw new SrsError(400, {
+      error: 'E-LST-04',
+      fields: ['pickupStart'],
+      reason: 'too_far',
+      maxDaysAhead: rule.maxDaysAhead,
+    });
+  }
+}
+
 /**
  * D-62 / D-64: the opening period of the branch that contains `start`. A branch without hours (registered before they
  * were required) cannot be used: 409 opening_hours_required. When the branch is closed at `start`, 400 E-LST-04 on
@@ -227,8 +261,15 @@ async function shopOf(vendorId: string): Promise<ShopDetails> {
 }
 
 /** GET /vendors/me: the shop details and its branches (D-64), for the listing forms. */
-export async function getShop(vendorId: string): Promise<ShopDetails & { branches: BranchRecord[] }> {
-  return { ...(await shopOf(vendorId)), branches: await findVendorBranches(vendorId) };
+export async function getShop(
+  vendorId: string,
+): Promise<ShopDetails & { branches: BranchRecord[]; pickupStartRule: PickupStartRule }> {
+  return {
+    ...(await shopOf(vendorId)),
+    branches: await findVendorBranches(vendorId),
+    // D-104: so the form's picker offers only the allowed days.
+    pickupStartRule: await pickupStartRule(),
+  };
 }
 
 /** PATCH /vendors/me {opensAt, closesAt} (D-62): saves the main branch's opening hours; they cannot be removed. */
@@ -352,6 +393,7 @@ export async function previewPickBy(
     throw new SrsError(400, { error: 'E-LST-04', fields });
   }
   const branch = await ownBranch(vendorId, check.value.branchId);
+  await checkPickupStart(new Date(check.value.pickupStart));
   const draft = typeof input.photoKey === 'string' ? await draftOf(input.photoKey) : undefined;
   const { pickupEnd, closesAt, category } = await workOutPickBy(branch, {
     foodCategory: check.value.foodCategory,
@@ -387,6 +429,8 @@ export async function createListing(
   checkConfirmed(draft, listing, confirmed);
   const branch = await ownBranch(vendorId, listing.branchId);
   const pickupStart = new Date(listing.pickupStart);
+  // D-104: checked when the Draft is saved and again when it is published.
+  await checkPickupStart(pickupStart);
   const { pickupEnd: limit, category } = await workOutPickBy(branch, {
     foodCategory: listing.foodCategory,
     storage: listing.storage,
@@ -462,6 +506,8 @@ export async function createQuickPost(
     throw new SrsError(403, { error: 'quick_post_informal_only' });
   }
   const post = check.value;
+  // D-104: a start the vendor chose may not be in the past (beyond the grace) or too far ahead; no start means now.
+  if (typeof input.pickupStart === 'string') await checkPickupStart(new Date(input.pickupStart));
   await checkPhotoKey(post.photoKey);
   // D-86 NFR-05b: with an AI draft for this photo, every AI-filled field is confirmed or edited.
   checkConfirmed(await draftOf(post.photoKey), post, confirmed);
@@ -569,6 +615,8 @@ export async function publishListing(vendorId: string, id: string): Promise<List
     ...(listing.listingType === null ? ['destination'] : []),
   ];
   if (missing.length > 0) throw new SrsError(409, { error: 'not_ready_to_publish', missing });
+  // D-104: a Draft whose pickup start has passed (or is too far ahead) is not published.
+  await checkPickupStart(listing.pickupStart);
   // The fields were checked when the Draft was saved (validateListing) and the table enforces the same rules.
   const published = await activateDraft(vendorId, id);
   if (published === undefined) {

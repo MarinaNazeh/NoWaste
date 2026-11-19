@@ -148,6 +148,44 @@ export type SignUpValidation = { ok: true; value: ValidSignUp } | { ok: false; f
 
 export declare function validateSignUp(input: SignUpInput): SignUpValidation;
 
+/** D-105: a vendor or partner application without the login details (a rejected application sent again). */
+export interface ApplicationInput {
+  role?: unknown;
+  vendorProfile?: unknown;
+  partnerProfile?: unknown;
+}
+
+export interface ValidApplication {
+  role: 'vendor' | PartnerRole;
+  vendorProfile: VendorProfile | null;
+  partnerProfile: ValidPartnerProfile | null;
+}
+
+export declare function validateApplication(
+  input: ApplicationInput,
+): { ok: true; value: ValidApplication } | { ok: false; fields: ProfileField[] };
+
+/** D-105: why an application was rejected. */
+export declare const REJECTION_REASONS: readonly [
+  'wrong_location',
+  'wrong_contact',
+  'not_food_business',
+  'duplicate_account',
+  'other',
+];
+export type RejectionReason = (typeof REJECTION_REASONS)[number];
+export declare const REJECTION_NOTE_MAX: number;
+
+export interface Rejection {
+  reason: RejectionReason;
+  /** Trimmed; null when none was written. Required for Other. */
+  note: string | null;
+}
+
+export declare function validateRejection(
+  input: unknown,
+): { ok: true; value: Rejection } | { ok: false; fields: ('reason' | 'note')[] };
+
 /** D-62: a time of day "H:MM" or "HH:MM" (Arabic-Indic digits allowed), returned as "HH:MM", or null. */
 export declare function parseClockTime(value: unknown): string | null;
 
@@ -318,6 +356,19 @@ export declare function validateCardInput(input: {
   expiry?: unknown;
   cvv?: unknown;
 }): { ok: true; value: CardInput } | { ok: false; fields: CardField[] };
+
+/** D-104: the pickup start limits from the settings row LISTING-START. */
+export interface PickupStartRule {
+  maxDaysAhead: number;
+  pastGraceMinutes: number;
+}
+
+/** D-104: 'past' (before now minus the grace), 'too_far' (more than maxDaysAhead days ahead) or null when allowed. */
+export declare function pickupStartProblem(
+  start: number,
+  now: number,
+  rule: PickupStartRule,
+): 'past' | 'too_far' | null;
 
 /** FR-RES-10 (D-101): a typed pickup code of exactly `digits` digits (BR-09), in Western digits, or null. */
 export declare function parsePickupCode(value: unknown, digits: number): string | null;

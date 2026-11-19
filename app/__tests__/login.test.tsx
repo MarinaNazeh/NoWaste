@@ -25,6 +25,8 @@ jest.mock('@/api/client', () => ({
   updateMyLanguage: jest.fn().mockResolvedValue(true),
   listApplications: jest.fn().mockResolvedValue({ kind: 'ok', applications: [] }),
   decideApplication: jest.fn(),
+  // D-105: a rejected applicant's reason; not needed in these tests.
+  getMyApplication: jest.fn().mockResolvedValue({ kind: 'unexpected' }),
 }));
 
 const mockedLogin = jest.mocked(login);
