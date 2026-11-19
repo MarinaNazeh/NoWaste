@@ -58,6 +58,8 @@ const SHOP: Shop = {
   opensAt: '00:00',
   closesAt: '23:59',
   branches: [],
+  // D-104: the pickup start limits.
+  pickupStartRule: { maxDaysAhead: 7, pastGraceMinutes: 5 },
 };
 
 function listing(overrides: Partial<Listing> = {}): Listing {

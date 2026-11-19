@@ -6,6 +6,9 @@ import {
   isValidEmail,
   isValidPassword,
   normalizeEgyptianMobile,
+  pickupStartProblem,
+  validateApplication,
+  validateRejection,
   validateCardInput,
   validateRegistration,
 } from '@nowaste/shared';
@@ -135,5 +138,82 @@ describe('FR-RES-02 D-99 shared card format', () => {
       ok: false,
       fields,
     });
+  });
+});
+
+describe('E-LST-04 D-104 shared pickup start limits', () => {
+  const now = Date.parse('2026-11-17T10:00:00.000Z');
+  const rule = { maxDaysAhead: 7, pastGraceMinutes: 5 };
+  const minutes = (n: number) => now + n * 60_000;
+
+  test.each([
+    ['now', 0, null],
+    ['4 minutes ago (within the grace)', -4, null],
+    ['exactly 5 minutes ago', -5, null],
+    ['6 minutes ago', -6, 'past'],
+    ['ten days ago', -10 * 24 * 60, 'past'],
+    ['exactly 7 days ahead', 7 * 24 * 60, null],
+    ['7 days and a minute ahead', 7 * 24 * 60 + 1, 'too_far'],
+  ])('E-LST-04 D-104 a start %s gives %s', (_name, offset, expected) => {
+    expect(pickupStartProblem(minutes(offset), now, rule)).toBe(expected);
+  });
+});
+
+describe('FR-ACC-07 D-105 shared rejection reason', () => {
+  test.each(['wrong_location', 'wrong_contact', 'not_food_business', 'duplicate_account'])(
+    'FR-ACC-07 D-105 %s is accepted without a note',
+    (reason) => {
+      expect(validateRejection({ reason })).toEqual({ ok: true, value: { reason, note: null } });
+    },
+  );
+
+  test('FR-ACC-07 D-105 the note is trimmed and kept', () => {
+    expect(validateRejection({ reason: 'wrong_contact', note: '  Call us  ' })).toEqual({
+      ok: true,
+      value: { reason: 'wrong_contact', note: 'Call us' },
+    });
+  });
+
+  test.each([
+    ['no reason', {}, ['reason']],
+    ['an unknown reason', { reason: 'x' }, ['reason']],
+    ['Other without a note', { reason: 'other' }, ['note']],
+    ['Other with a blank note', { reason: 'other', note: '  ' }, ['note']],
+    ['a note that is not text', { reason: 'wrong_location', note: 5 }, ['note']],
+    ['a note over 300 characters', { reason: 'wrong_location', note: 'x'.repeat(301) }, ['note']],
+  ])('FR-ACC-07 D-105 %s is refused', (_name, input, fields) => {
+    expect(validateRejection(input)).toEqual({ ok: false, fields });
+  });
+});
+
+describe('FR-ACC-02 FR-ACC-03 D-105 shared application check (sign-up and sending again)', () => {
+  test('FR-ACC-02 D-105 a vendor application without login details is checked like the sign-up', () => {
+    const result = validateApplication({
+      role: 'vendor',
+      vendorProfile: {
+        shopName: ' Fatma ',
+        vendorType: 'formal',
+        address: 'Dokki',
+        latitude: 30,
+        longitude: 31,
+        contact: '01012345678',
+        opensAt: '08:00',
+        closesAt: '20:00',
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        role: 'vendor',
+        vendorProfile: { shopName: 'Fatma', contact: '+201012345678' },
+        partnerProfile: null,
+      },
+    });
+  });
+
+  test('E-ACC-02 D-105 an invalid partner application lists its fields', () => {
+    expect(validateApplication({ role: 'charity', partnerProfile: {} })).toMatchObject({ ok: false });
+    expect(validateApplication({ role: 'consumer' })).toEqual({ ok: false, fields: ['role'] });
   });
 });

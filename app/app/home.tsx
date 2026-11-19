@@ -11,6 +11,7 @@ import { AppText } from '@/components/AppText';
 import { ApplicationsList } from '@/components/ApplicationsList';
 import { ConsumerHome } from '@/components/ConsumerHome';
 import { Notice } from '@/components/Notice';
+import { RejectedApplication } from '@/components/RejectedApplication';
 import { HomeHeader } from '@/components/HomeHeader';
 import { Screen } from '@/components/Screen';
 import { VendorHome } from '@/components/VendorHome';
@@ -67,6 +68,8 @@ export default function HomeScreen() {
             }
           />
           <AppText color="textMuted">{t('home.noFoodUntilApproved')}</AppText>
+          {/* D-105: the reason, the support contact and Fix and send again. */}
+          {user.status === 'Rejected' ? <RejectedApplication /> : null}
         </View>
       </Screen>
     );

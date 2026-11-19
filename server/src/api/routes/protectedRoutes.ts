@@ -34,7 +34,13 @@ import {
   noShowStandingHandler,
   reserveHandler,
 } from './reservations.js';
-import { changePasswordHandler, getMeHandler, patchMeHandler } from './users.js';
+import {
+  changePasswordHandler,
+  getMeHandler,
+  getMyApplicationHandler,
+  patchMeHandler,
+  sendApplicationAgainHandler,
+} from './users.js';
 import {
   completePickupHandler,
   listingReservationsHandler,
@@ -62,6 +68,19 @@ export const protectedRoutes: readonly ProtectedRoute[] = [
   { method: 'patch', path: '/users/me', roles: EVERYONE, handler: patchMeHandler },
   // FR-ACC-06 (D-95): every logged-in user may change their password.
   { method: 'post', path: '/users/me/password', roles: EVERYONE, handler: changePasswordHandler },
+  // D-105: vendors and partners (any status) see their application and send a rejected one again.
+  {
+    method: 'get',
+    path: '/users/me/application',
+    roles: ['vendor', 'partner'],
+    handler: getMyApplicationHandler,
+  },
+  {
+    method: 'post',
+    path: '/users/me/application',
+    roles: ['vendor', 'partner'],
+    handler: sendApplicationAgainHandler,
+  },
   // D-70: what each perishability category means in hours (BR-01).
   { method: 'get', path: '/perishability/categories', roles: EVERYONE, handler: categoryHoursHandler },
   { method: 'get', path: '/admin/applications', roles: ['admin'], handler: listApplicationsHandler },
@@ -113,9 +132,19 @@ export const protectedRoutes: readonly ProtectedRoute[] = [
   { method: 'post', path: '/listings/:id/unfit', ...APPROVED_VENDOR, handler: markUnfitHandler },
   { method: 'post', path: '/listings/:id/publish', ...APPROVED_VENDOR, handler: publishListingHandler },
   // US-32, US-33 (D-101): the vendor's reservations of a listing and the pickup code at the counter.
-  { method: 'get', path: '/listings/:id/reservations', roles: ['vendor'], handler: listingReservationsHandler },
+  {
+    method: 'get',
+    path: '/listings/:id/reservations',
+    roles: ['vendor'],
+    handler: listingReservationsHandler,
+  },
   { method: 'post', path: '/listings/:id/pickups/verify', ...APPROVED_VENDOR, handler: verifyPickupHandler },
-  { method: 'post', path: '/listings/:id/pickups/complete', ...APPROVED_VENDOR, handler: completePickupHandler },
+  {
+    method: 'post',
+    path: '/listings/:id/pickups/complete',
+    ...APPROVED_VENDOR,
+    handler: completePickupHandler,
+  },
   // US-28, US-30 (SDD C-09): consumers reserve without a card and check in. /no-show-standing before /:id.
   // D-99: the pretend bank's card page (stands in for the payment gateway; the card never reaches NoWaste).
   { method: 'post', path: '/mock-bank/tokens', roles: ['consumer'], handler: createCardTokenHandler },

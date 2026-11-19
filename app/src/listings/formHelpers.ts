@@ -61,6 +61,13 @@ export function pickupNoteFor(
   t: TFunction,
   language: Language,
 ): PickupNote | null {
+  // D-104: the pickup start is in the past or too far ahead.
+  if (result.kind === 'invalid' && result.startReason === 'past') {
+    return { field: 'pickupStart', message: t('listing.errors.startPast') };
+  }
+  if (result.kind === 'invalid' && result.startReason === 'too_far') {
+    return { field: 'pickupStart', message: t('listing.errors.startTooFar', { days: result.maxDaysAhead }) };
+  }
   if (result.kind === 'invalid' && result.hours !== undefined) {
     return {
       field: result.fields.includes('pickupStart') ? 'pickupStart' : 'pickupEnd',

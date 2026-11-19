@@ -96,6 +96,7 @@ jest.mock('@/components/DateTimeField', () => {
       disabled,
       testID,
       emptyText,
+      maxDaysAhead,
     }: {
       label: string;
       value: string | null;
@@ -104,9 +105,12 @@ jest.mock('@/components/DateTimeField', () => {
       disabled?: boolean;
       testID?: string;
       emptyText?: string;
+      maxDaysAhead?: number;
     }) =>
       createElement(TextInput, {
         testID,
+        // D-104: tests read the picker's limit from this prop.
+        maxDaysAhead,
         accessibilityLabel: label,
         accessibilityHint: error,
         editable: !disabled,

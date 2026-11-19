@@ -1,9 +1,17 @@
 // US-07: one vendor or partner application for the administrator (FR-ACC-07): the details, a map with the pin and
 // Approve or Reject. Each decision is confirmed first, because it cannot be undone here (only Pending can change).
+// D-105: rejecting needs a reason from the list and an optional note (required for Other); the applicant sees both.
+// An application sent again after a rejection shows "Reapplied" with the last reason.
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import {
+  REJECTION_NOTE_MAX,
+  REJECTION_REASONS,
+  validateRejection,
+  type RejectionReason,
+} from '@nowaste/shared';
 import { decideApplication, listApplications, type Application } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
@@ -11,7 +19,9 @@ import { applicantName, useApplicantType } from '@/components/ApplicationsList';
 import { Button } from '@/components/Button';
 import { MapView } from '@/components/MapView';
 import { Notice } from '@/components/Notice';
+import { OptionList } from '@/components/OptionList';
 import { Screen } from '@/components/Screen';
+import { TextField } from '@/components/TextField';
 import { useLanguage } from '@/i18n/LanguageProvider';
 import { colors, spacing } from '@/theme';
 
@@ -41,6 +51,10 @@ export default function ApplicationScreen() {
   const [confirming, setConfirming] = useState<Decision | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // D-105: the reason and note of a rejection, and which of them is missing or wrong.
+  const [reason, setReason] = useState<RejectionReason | null>(null);
+  const [note, setNote] = useState('');
+  const [rejectionError, setRejectionError] = useState<'reason' | 'note' | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,9 +80,24 @@ export default function ApplicationScreen() {
 
   async function decide(decision: Decision) {
     if (token === null) return;
+    let rejection: { reason: RejectionReason; note?: string } | undefined;
+    if (decision === 'reject') {
+      const check = validateRejection({ reason: reason ?? undefined, note });
+      if (!check.ok) {
+        setRejectionError(check.fields[0] ?? 'reason');
+        return;
+      }
+      rejection =
+        check.value.note === null
+          ? { reason: check.value.reason }
+          : { reason: check.value.reason, note: check.value.note };
+    }
     setBusy(true);
     setMessage(null);
-    const result = await decideApplication(token, userId, decision);
+    const result =
+      rejection === undefined
+        ? await decideApplication(token, userId, decision)
+        : await decideApplication(token, userId, decision, rejection);
     setBusy(false);
     setConfirming(null);
     if (result.kind === 'ok') {
@@ -78,6 +107,9 @@ export default function ApplicationScreen() {
       });
     } else if (result.kind === 'conflict') {
       setMessage(t('admin.conflict', { status: t(`statuses.${result.status}`) }));
+    } else if (result.kind === 'invalid') {
+      setConfirming('reject');
+      setRejectionError(result.fields[0] ?? 'reason');
     } else if (result.kind === 'unauthorized') {
       await sessionEnded();
       router.replace('/');
@@ -105,6 +137,15 @@ export default function ApplicationScreen() {
   }
 
   const { application } = load;
+  const last = application.lastRejection;
+  const rejectionMessage =
+    rejectionError === 'reason'
+      ? t('rejection.reasonRequired')
+      : rejectionError === 'note'
+        ? note.trim() === ''
+          ? t('rejection.noteRequired')
+          : t('rejection.noteTooLong', { max: REJECTION_NOTE_MAX })
+        : undefined;
   const vendor = application.vendorProfile;
   const partner = application.partnerProfile;
   const place = vendor ?? partner;
@@ -126,6 +167,17 @@ export default function ApplicationScreen() {
         <AppText variant="heading" accessibilityRole="header">
           {applicantName(application)}
         </AppText>
+        {last !== null ? (
+          <View testID="application-reapplied">
+            <Notice
+              tone="info"
+              message={[
+                t('rejection.reappliedDetails', { reason: t(`rejection.reasons.${last.reason}`) }),
+                ...(last.note !== null ? [t('rejection.reappliedNote', { note: last.note })] : []),
+              ].join(' ')}
+            />
+          </View>
+        ) : null}
         <Row label={t('admin.applicantType')} value={typeOf(application)} />
         {application.email !== null ? <Row label={t('admin.loginEmail')} value={application.email} /> : null}
         {application.phone !== null ? <Row label={t('admin.loginPhone')} value={application.phone} /> : null}
@@ -188,6 +240,36 @@ export default function ApplicationScreen() {
             tone="info"
             message={confirming === 'approve' ? t('admin.confirmApprove') : t('admin.confirmReject')}
           >
+            {confirming === 'reject' ? (
+              <View testID="application-reject-reason" style={styles.actions}>
+                <OptionList<RejectionReason>
+                  testID="rejection-reasons"
+                  label={t('rejection.reasonLabel')}
+                  options={REJECTION_REASONS.map((value) => ({
+                    value,
+                    label: t(`rejection.reasons.${value}`),
+                  }))}
+                  selected={reason === null ? [] : [reason]}
+                  onToggle={(value) => {
+                    setReason(value);
+                    setRejectionError(null);
+                  }}
+                  error={rejectionError === 'reason' ? rejectionMessage : undefined}
+                />
+                <TextField
+                  testID="rejection-note"
+                  label={reason === 'other' ? t('rejection.noteLabelRequired') : t('rejection.noteLabel')}
+                  hint={t('rejection.noteHint', { max: REJECTION_NOTE_MAX })}
+                  value={note}
+                  onChangeText={(text) => {
+                    setNote(text);
+                    setRejectionError(null);
+                  }}
+                  error={rejectionError === 'note' ? rejectionMessage : undefined}
+                  multiline
+                />
+              </View>
+            ) : null}
             <View style={styles.actions}>
               <Button
                 testID="application-confirm"

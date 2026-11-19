@@ -126,6 +126,7 @@ beforeEach(async () => {
       opensAt: '00:00',
       closesAt: '23:59',
       branches: [],
+      pickupStartRule: { maxDaysAhead: 7, pastGraceMinutes: 5 },
     },
   });
   mocked.mine.mockResolvedValue({ kind: 'ok', listings: [listing()] });

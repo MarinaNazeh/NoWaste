@@ -10,10 +10,12 @@ import { deleteAllUsers, readUserStatus, setUserStatus } from './helpers/databas
 const app = createApp();
 let adminToken: string;
 
+// D-105: a rejection needs a reason (rejectionReason.test.ts checks the reason itself).
 function decide(userId: string, decision: 'approve' | 'reject', token = adminToken) {
   return request(app)
     .post(`/admin/applications/${userId}/${decision}`)
-    .set('Authorization', `Bearer ${token}`);
+    .set('Authorization', `Bearer ${token}`)
+    .send(decision === 'reject' ? { reason: 'wrong_location' } : {});
 }
 
 function list(query = '?status=Pending', token = adminToken) {
@@ -61,6 +63,8 @@ describe('FR-ACC-07 list of applications', () => {
         longitude: 31.2122,
       },
       partnerProfile: null,
+      // D-105: never rejected.
+      lastRejection: null,
     });
     expect(items[1]).toMatchObject({
       userId: partner.id,

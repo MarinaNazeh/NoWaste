@@ -6,7 +6,7 @@
 // tap "Fill in with AI draft"; the draft fills the name and description in both languages and the category; each
 // AI-filled field is marked Draft and must be confirmed or edited before posting (NFR-05b); the estimated quantity is
 // only shown as an Estimate. Without a draft (E-LST-01) the vendor fills the form by hand.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,7 @@ import {
   type ListingFoodCategory,
   type QuickPostField,
 } from '@nowaste/shared';
-import { createQuickPost, type AiDraft, type AiField, type QuickPostRequest } from '@/api/client';
+import { createQuickPost, getShop, type AiDraft, type AiField, type QuickPostRequest } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { AiMark } from '@/components/AiMark';
 import { AppText } from '@/components/AppText';
@@ -81,6 +81,21 @@ export default function QuickPostScreen() {
   const [aiFields, setAiFields] = useState<AiField[]>([]);
   const [confirmed, setConfirmed] = useState<AiField[]>([]);
   const [showUnconfirmed, setShowUnconfirmed] = useState(false);
+  // D-104: the picker offers the pickup start only from now to this many days ahead (from the shop details).
+  const [maxDaysAhead, setMaxDaysAhead] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (token === null) return;
+    let active = true;
+    void getShop(token)
+      .then((result) => {
+        if (active && result.kind === 'ok') setMaxDaysAhead(result.shop.pickupStartRule.maxDaysAhead);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   // D-81: the main text fields are in the app language and the second ones in the other. When the vendor switches the
   // language after a draft, each text and its Confirmed state move to the field of their own language.
@@ -415,6 +430,7 @@ export default function QuickPostScreen() {
           hint={t('quickPost.pickupStartHint')}
           emptyText={t('quickPost.now')}
           value={pickupStart}
+          maxDaysAhead={maxDaysAhead}
           onChange={(iso) => {
             setPickupStart(iso);
             setPickupNote(null);

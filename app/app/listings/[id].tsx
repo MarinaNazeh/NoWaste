@@ -25,7 +25,16 @@ import { localDigits } from '@/i18n/digits';
 import { useLanguage } from '@/i18n/LanguageProvider';
 import { colors, radius, spacing } from '@/theme';
 
-type Problem = 'notApproved' | 'notDraft' | 'notReady' | 'unreachable' | 'unexpected' | 'notFound';
+type Problem =
+  | 'notApproved'
+  | 'notDraft'
+  | 'notReady'
+  | 'unreachable'
+  | 'unexpected'
+  | 'notFound'
+  // D-104: the Draft's pickup start has passed or is too far ahead.
+  | 'startPassed'
+  | 'startTooFar';
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

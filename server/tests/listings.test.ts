@@ -703,8 +703,9 @@ describe('FR-LST-02 Quick Post for informal vendors', () => {
       expect(response.body).toEqual({ error: 'E-LST-04', fields: ['pickupStart'] });
     });
 
-    test('FR-LST-02 D-75 a start already passed is taken as now (the pickup cannot start before posting)', async () => {
-      const response = await quickAt(informal.token, at(-30), at(90));
+    // D-104 replaced D-75's "a past start is taken as now": only a start inside the 5-minute grace is taken as now.
+    test('FR-LST-02 D-75 D-104 a start a few minutes ago (within the grace) is taken as now', async () => {
+      const response = await quickAt(informal.token, at(-3), at(90));
 
       expect(response.status).toBe(201);
       expect(response.body).toMatchObject({ pickupStart: NOW.toISOString(), pickupEnd: at(90) });
@@ -976,5 +977,134 @@ describe("D-64 the vendor's shop and branches (GET /vendors/me, POST and PATCH /
       .patch(`/vendors/me/branches/${branchId}`)
       .set('Authorization', `Bearer ${formal.token}`)
       .send({ opensAt: '00:00', closesAt: '23:59' });
+  });
+});
+
+// D-104 (Maryam, 2026-11-17): the pickup start may not be in the past (5 minutes of grace, for the time spent filling
+// the form) nor more than 7 days ahead, for full listings and Quick Posts. A Draft is checked when saved and again when
+// published. The limits come from the settings row LISTING-START.
+describe('E-LST-04 D-104 the pickup start is from now to 7 days ahead', () => {
+  const DAY = 24 * 60;
+
+  test('E-LST-04 D-104 a full listing starting in the past is refused on the pickup start', async () => {
+    const response = await listings(
+      formal.token,
+      await listingBody(app, formal.token, at, { pickupStart: at(-60) }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'E-LST-04', fields: ['pickupStart'], reason: 'past' });
+  });
+
+  test('E-LST-04 D-104 a full listing starting on an earlier day (8 Nov style) is refused', async () => {
+    const response = await listings(
+      formal.token,
+      await listingBody(app, formal.token, at, { pickupStart: at(-7 * DAY) }),
+    );
+
+    expect(response.body).toMatchObject({ error: 'E-LST-04', fields: ['pickupStart'], reason: 'past' });
+  });
+
+  test('FR-LST-01 D-104 a full listing starting within the 5-minute grace is saved', async () => {
+    const response = await listings(
+      formal.token,
+      await listingBody(app, formal.token, at, { pickupStart: at(-4) }),
+    );
+
+    expect(response.status).toBe(201);
+  });
+
+  test('FR-LST-01 D-104 a full listing starting exactly 7 days ahead is saved', async () => {
+    const response = await listings(
+      formal.token,
+      await listingBody(app, formal.token, at, { pickupStart: at(7 * DAY) }),
+    );
+
+    expect(response.status).toBe(201);
+  });
+
+  test('E-LST-04 D-104 a full listing starting more than 7 days ahead is refused with the limit', async () => {
+    const response = await listings(
+      formal.token,
+      await listingBody(app, formal.token, at, { pickupStart: at(7 * DAY + 1) }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'E-LST-04',
+      fields: ['pickupStart'],
+      reason: 'too_far',
+      maxDaysAhead: 7,
+    });
+  });
+
+  test('E-LST-04 D-104 the pick-by preview refuses a past start the same way', async () => {
+    const body = await listingBody(app, formal.token, at, { pickupStart: at(-60) });
+
+    const response = await post(app, '/listings/pick-by', formal.token, {
+      foodCategory: body.foodCategory,
+      storage: body.storage,
+      pickupStart: body.pickupStart,
+      branchId: body.branchId,
+    });
+
+    expect(response.body).toEqual({ error: 'E-LST-04', fields: ['pickupStart'], reason: 'past' });
+  });
+
+  test('E-LST-04 D-104 a Draft whose pickup start has passed cannot be published', async () => {
+    const id = await createDraft(app, formal.token, at);
+    await readyToPublish(app, formal.token, id);
+    clock.now = () => new Date(NOW.getTime() + 60 * 60_000);
+
+    const response = await post(app, `/listings/${id}/publish`, formal.token);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'E-LST-04', fields: ['pickupStart'], reason: 'past' });
+    expect(((await get(app, `/listings/${id}`, formal.token)).body as { status: string }).status).not.toBe(
+      'Active',
+    );
+  });
+
+  test('E-LST-04 D-104 a Quick Post with a chosen start in the past is refused', async () => {
+    const response = await post(app, '/listings/quick', informal.token, {
+      ...(await quickPostBody(app, informal.token, at)),
+      pickupStart: at(-30),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'E-LST-04', fields: ['pickupStart'], reason: 'past' });
+  });
+
+  test('E-LST-04 D-104 a Quick Post starting more than 7 days ahead is refused with the limit', async () => {
+    const response = await post(app, '/listings/quick', informal.token, {
+      ...(await quickPostBody(app, informal.token, at)),
+      pickupStart: at(7 * DAY + 60),
+      pickupEnd: at(7 * DAY + 120),
+    });
+
+    expect(response.body).toEqual({
+      error: 'E-LST-04',
+      fields: ['pickupStart'],
+      reason: 'too_far',
+      maxDaysAhead: 7,
+    });
+  });
+
+  test('FR-LST-02 D-104 a Quick Post without a start still starts now', async () => {
+    const response = await post(
+      app,
+      '/listings/quick',
+      informal.token,
+      await quickPostBody(app, informal.token, at),
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ pickupStart: NOW.toISOString() });
+  });
+
+  test('FR-LST-01 D-104 GET /vendors/me gives the form the pickup start limit', async () => {
+    const response = await get(app, '/vendors/me', formal.token);
+
+    expect(response.body).toMatchObject({ pickupStartRule: { maxDaysAhead: 7, pastGraceMinutes: 5 } });
   });
 });
