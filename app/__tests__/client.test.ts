@@ -1,6 +1,6 @@
 // The API client for US-04 and US-07 (IF-COM-03, E-ACC-03, E-ACC-06, FR-ACC-07): what it sends and how it reads the
 // answers. fetch is mocked.
-import { decideApplication, getMe, listApplications, login, logout } from '@/api/client';
+import { decideApplication, getMe, listApplications, login, logout, reverseGeocode } from '@/api/client';
 
 const mockedFetch = jest.fn();
 
@@ -103,5 +103,23 @@ describe('FR-ACC-07 admin calls', () => {
     expect(sent(0).url).toBe('http://api.test/admin/applications/v1/approve');
     expect(sent(1).url).toBe('http://api.test/admin/applications/v1/reject');
     expect(sent(1).init.method).toBe('POST');
+  });
+});
+
+describe('NFR-06 D-47 reverseGeocode', () => {
+  test('NFR-06 asks GET /geocode/reverse with the point and the language and returns the address', async () => {
+    answer(200, { address: 'ميدان التحرير' });
+    await expect(reverseGeocode(30.0444, 31.2357, 'ar')).resolves.toBe('ميدان التحرير');
+    expect(sent().url).toBe('http://api.test/geocode/reverse?latitude=30.0444&longitude=31.2357&language=ar');
+    expect(sent().headers.get('Authorization')).toBeNull();
+  });
+
+  test('NFR-12 no address, an error answer or no connection gives null', async () => {
+    answer(200, { address: null });
+    await expect(reverseGeocode(0, 0, 'en')).resolves.toBeNull();
+    answer(400, { error: 'invalid_input', fields: ['latitude'] });
+    await expect(reverseGeocode(0, 0, 'en')).resolves.toBeNull();
+    mockedFetch.mockRejectedValueOnce(new Error('offline'));
+    await expect(reverseGeocode(0, 0, 'en')).resolves.toBeNull();
   });
 });

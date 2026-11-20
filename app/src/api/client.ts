@@ -279,3 +279,27 @@ export async function decideApplication(
   if (result.status === 409 && status !== undefined) return { kind: 'conflict', status };
   return { kind: 'unexpected' };
 }
+
+/**
+ * GET /geocode/reverse (decision D-47): the written address of a map pin in the app's language. Returns null when
+ * the server knows no address or cannot be reached; the caller then uses the phone's geocoder.
+ */
+export async function reverseGeocode(
+  latitude: number,
+  longitude: number,
+  language: Language,
+): Promise<string | null> {
+  try {
+    const query = new URLSearchParams({
+      latitude: String(latitude),
+      longitude: String(longitude),
+      language,
+    });
+    const response = await request(`/geocode/reverse?${query.toString()}`);
+    if (!response.ok) return null;
+    const body = (await response.json()) as { address?: unknown };
+    return typeof body.address === 'string' && body.address !== '' ? body.address : null;
+  } catch {
+    return null;
+  }
+}

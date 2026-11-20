@@ -2,8 +2,8 @@
 // (docs/feedback-changes.md). The pin starts at the device GPS location (IF-HW-03). If location permission is denied
 // or no position is found, the app says why the location is needed and the user places the pin by hand (IF-HW-04,
 // open question 32 / TBD-3). "Use my current location" asks again and puts the pin back there. The map itself is the C-24 MapView wrapper.
-// The written address and the pin follow each other: when the pin is placed (GPS, tap or drag) its address is
-// written into the field, and when the user finishes typing an address the pin and the map move to it.
+// The written address and the pin follow each other: when the pin is placed (GPS, tap or drag) its address, in the
+// app's language when the server knows it (D-47), is written into the field, and when the user finishes typing an address the pin and the map move to it.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import * as Location from 'expo-location';
@@ -13,6 +13,7 @@ import { Button } from './Button';
 import { MapView, type Coordinates } from './MapView';
 import { Notice } from './Notice';
 import { TextField } from './TextField';
+import { reverseGeocode } from '@/api/client';
 import { useLanguage } from '@/i18n/LanguageProvider';
 import { spacing } from '@/theme';
 
@@ -22,15 +23,22 @@ const FALLBACK_CENTER: Coordinates = { latitude: 30.0444, longitude: 31.2357 };
 
 type GpsState = 'asking' | 'found' | 'unavailable';
 
-/** The device GPS position, or null when permission is denied or no position is found. */
-async function readDevicePosition(): Promise<Coordinates | null> {
+/** Why there is no device position: permission refused, or location services turned off on the phone. */
+type NoPositionReason = 'denied' | 'servicesOff';
+
+type DevicePosition = { position: Coordinates } | { position: null; reason: NoPositionReason };
+
+/** The device GPS position, or the reason there is none (IF-HW-04). */
+async function readDevicePosition(): Promise<DevicePosition> {
   try {
     const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== 'granted') return null;
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+    if (permission.status !== 'granted') return { position: null, reason: 'denied' };
+    if (!(await Location.hasServicesEnabledAsync())) return { position: null, reason: 'servicesOff' };
+    const found = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    return { position: { latitude: found.coords.latitude, longitude: found.coords.longitude } };
   } catch {
-    return null;
+    // No fix (for example indoors, or services turned off while asking).
+    return { position: null, reason: 'servicesOff' };
   }
 }
 
@@ -62,30 +70,67 @@ export function LocationPicker({
   addressError,
 }: LocationPickerProps) {
   const { t } = useTranslation();
-  const { direction } = useLanguage();
+  const { direction, language } = useLanguage();
   const [gps, setGps] = useState<GpsState>('asking');
   const [center, setCenter] = useState<Coordinates>(FALLBACK_CENTER);
   // The address written from the pin; the "check it" note shows until the user edits it.
   const [autoAddress, setAutoAddress] = useState<string | null>(null);
   const [addressNotFound, setAddressNotFound] = useState(false);
+  // Shown under "Use my current location" when the user asked and no position came back (IF-HW-04).
+  const [detectProblem, setDetectProblem] = useState<NoPositionReason | null>(null);
   // Only the newest lookup may change the pin or the address (an older, slower answer is ignored).
   const lookup = useRef(0);
   const lastSearched = useRef('');
 
-  async function writeAddressOf(here: Coordinates) {
-    const id = ++lookup.current;
+  // The address in the field now, for answers that arrive later.
+  const addressNow = useRef(address);
+  useEffect(() => {
+    addressNow.current = address;
+  }, [address]);
+
+  function writeAutoAddress(text: string) {
+    lastSearched.current = text;
+    addressNow.current = text;
+    setAutoAddress(text);
+    setAddressNotFound(false);
+    onAddressChange(text);
+  }
+
+  async function phoneAddressOf(here: Coordinates): Promise<string> {
     try {
       const [found] = await Location.reverseGeocodeAsync(here);
-      if (id !== lookup.current || found === undefined) return;
-      const text = formatAddress(found);
-      if (text === '') return;
-      lastSearched.current = text;
-      setAutoAddress(text);
-      setAddressNotFound(false);
-      onAddressChange(text);
+      return found === undefined ? '' : formatAddress(found);
     } catch {
-      // No address for this spot: the user types it.
+      return '';
     }
+  }
+
+  /**
+   * D-47: both lookups start at once. The phone's geocoder answers quickly but only in the phone's language, so its
+   * address is written first; the server's address, in the app's language, replaces it when it arrives, unless the
+   * user has changed the field meanwhile. A slow or unreachable server never holds the address back.
+   */
+  async function writeAddressOf(here: Coordinates) {
+    const id = ++lookup.current;
+    const fromServer = reverseGeocode(here.latitude, here.longitude, language).catch(() => null);
+    const fromPhone = phoneAddressOf(here);
+
+    let written: string | null = null;
+    const serverFirst = await Promise.race([fromServer, fromPhone.then(() => undefined)]);
+    if (id !== lookup.current) return;
+    if (typeof serverFirst !== 'string') {
+      const phoneText = await fromPhone;
+      if (id !== lookup.current) return;
+      if (phoneText !== '') {
+        writeAutoAddress(phoneText);
+        written = phoneText;
+      }
+    }
+    const serverText = typeof serverFirst === 'string' ? serverFirst : await fromServer;
+    if (id !== lookup.current || serverText === null || serverText === '') return;
+    // Do not overwrite what the user typed after the phone address was written.
+    if (written !== null && addressNow.current !== written) return;
+    writeAutoAddress(serverText);
   }
 
   function placePin(here: Coordinates) {
@@ -119,6 +164,7 @@ export function LocationPicker({
    * address is written only into an empty field; after "Use my current location" it is always written.
    */
   function showPosition(here: Coordinates | null, firstTry: boolean) {
+    if (here !== null) setDetectProblem(null);
     if (here === null) {
       setGps('unavailable');
       return;
@@ -132,8 +178,8 @@ export function LocationPicker({
 
   useEffect(() => {
     let active = true;
-    void readDevicePosition().then((here) => {
-      if (active) showPosition(here, true);
+    void readDevicePosition().then(({ position }) => {
+      if (active) showPosition(position, true);
     });
     return () => {
       active = false;
@@ -165,11 +211,20 @@ export function LocationPicker({
         accessibilityHint={t('location.detectHint')}
         onPress={() => {
           setGps('asking');
-          void readDevicePosition().then((here) => {
-            showPosition(here, false);
+          setDetectProblem(null);
+          void readDevicePosition().then((result) => {
+            if (result.position === null) setDetectProblem(result.reason);
+            showPosition(result.position, false);
           });
         }}
       />
+      {detectProblem !== null ? (
+        <Notice
+          testID="location-detect-problem"
+          tone="error"
+          message={t(detectProblem === 'denied' ? 'location.detectDenied' : 'location.detectServicesOff')}
+        />
+      ) : null}
       <AppText
         variant="caption"
         color={pinError !== undefined ? 'error' : 'textMuted'}

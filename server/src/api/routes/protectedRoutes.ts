@@ -1,6 +1,6 @@
 // Every protected route and the role groups it is open to, in one place (IF-COM-04, NFR-09c). Each route is mounted
 // behind `authenticate` and `requireRole`, and tests/rbac.test.ts checks every route against every role group, so a
-// route added here is covered automatically. Only POST /auth/register, POST /auth/login and GET /health are public.
+// route added here is covered automatically. Only POST /auth/register, POST /auth/login, GET /health and GET /geocode/reverse (D-47) are public.
 import type { RequestHandler, Router } from 'express';
 import { ROLE_GROUPS, type RoleGroup } from '../../domain/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';

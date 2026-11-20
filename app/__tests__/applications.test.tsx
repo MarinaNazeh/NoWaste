@@ -3,14 +3,15 @@
 // the C-24 map wrapper is replaced in jest.setup.ts by a button that places the pin at 30.05, 31.25.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { fireEvent, screen, waitFor, within } from 'expo-router/testing-library';
-import { registerConsumer, submitApplication } from '@/api/client';
+import { act, fireEvent, screen, waitFor, within } from 'expo-router/testing-library';
+import { registerConsumer, reverseGeocode, submitApplication } from '@/api/client';
 import { renderApp } from './helpers/renderApp';
 
 jest.mock('@/api/client', () => ({
   isServerHealthy: jest.fn().mockResolvedValue(true),
   registerConsumer: jest.fn(),
   submitApplication: jest.fn(),
+  reverseGeocode: jest.fn(),
 }));
 
 jest.mock('expo-location', () => ({
@@ -18,15 +19,18 @@ jest.mock('expo-location', () => ({
   getCurrentPositionAsync: jest.fn(),
   geocodeAsync: jest.fn(),
   reverseGeocodeAsync: jest.fn(),
+  hasServicesEnabledAsync: jest.fn(),
   Accuracy: { Balanced: 3 },
 }));
 
 const mockedSubmit = jest.mocked(submitApplication);
 const mockedConsumer = jest.mocked(registerConsumer);
+const mockedServerAddress = jest.mocked(reverseGeocode);
 const mockedPermission = jest.mocked(Location.requestForegroundPermissionsAsync);
 const mockedPosition = jest.mocked(Location.getCurrentPositionAsync);
 const mockedGeocode = jest.mocked(Location.geocodeAsync);
 const mockedReverse = jest.mocked(Location.reverseGeocodeAsync);
+const mockedServices = jest.mocked(Location.hasServicesEnabledAsync);
 
 function grantLocation(latitude = 30.0381, longitude = 31.2122) {
   mockedPermission.mockResolvedValue({ status: 'granted' } as Location.LocationPermissionResponse);
@@ -45,6 +49,8 @@ beforeEach(async () => {
   mockedPosition.mockReset();
   mockedGeocode.mockReset().mockResolvedValue([]);
   mockedReverse.mockReset().mockResolvedValue([]);
+  mockedServices.mockReset().mockResolvedValue(true);
+  mockedServerAddress.mockReset().mockResolvedValue(null);
 });
 
 // The role is chosen on the Welcome screen (D-30, tested in welcome.test.tsx) and passed to Register as ?role=.
@@ -348,7 +354,7 @@ describe('IF-HW-04 location permission denied', () => {
 
     expect(
       await screen.findByText(
-        'NoWaste needs your location to place the pin. You can still place it by hand: tap the map, then drag the pin to the exact spot.',
+        'NoWaste needs your location to place the pin. You can still enter it by hand: type the written address below, or tap the map, then drag the pin to the exact spot.',
       ),
     ).toBeTruthy();
     expect(screen.getByText('No pin placed yet')).toBeTruthy();
@@ -367,6 +373,37 @@ describe('IF-HW-04 location permission denied', () => {
     expect(mockedSubmit.mock.calls[0]?.[0]).toMatchObject({
       vendorProfile: { latitude: 30.05, longitude: 31.25 },
     });
+  });
+
+  test('IF-HW-04 TBD-3 with permission denied, typing an address places the pin there', async () => {
+    denyLocation();
+    mockedGeocode.mockResolvedValue([
+      { latitude: 30.0626, longitude: 31.2497 } as Location.LocationGeocodedLocation,
+    ]);
+    await openRegisterAs('Vendor');
+    await screen.findByText(/needs your location/);
+    expect(screen.getByText('No pin placed yet')).toBeTruthy();
+
+    const field = screen.getByLabelText('Written address');
+    await fireEvent.changeText(field, '26 July Street, Zamalek, Cairo');
+    await fireEvent(field, 'blur');
+
+    expect(await screen.findByText('Pin: 30.06260, 31.24970')).toBeTruthy();
+    expect(mockedGeocode).toHaveBeenCalledWith('26 July Street, Zamalek, Cairo');
+    expect(mockedPosition).not.toHaveBeenCalled();
+  });
+
+  test('IF-HW-04 TBD-3 the permission notice offers both ways to enter the location in Arabic', async () => {
+    denyLocation();
+    await AsyncStorage.setItem('nowaste.language', 'ar');
+    await renderApp('/register?role=vendor');
+    await screen.findByText('الموقع');
+
+    expect(
+      await screen.findByText(
+        'يحتاج NoWaste إلى موقعك لوضع الدبوس. يمكنك إدخاله يدويًا: اكتب العنوان المكتوب بالأسفل، أو اضغط على الخريطة ثم اسحب الدبوس إلى المكان الدقيق.',
+      ),
+    ).toBeTruthy();
   });
 
   test('IF-HW-04 a failed GPS reading is handled like a denied permission', async () => {
@@ -411,6 +448,121 @@ describe('FR-ACC-02 IF-HW-03 written address and pin stay in step', () => {
     expect(await screen.findByText('Pin: 30.06260, 31.24970')).toBeTruthy();
     expect(mockedGeocode).toHaveBeenCalledWith('5 Talaat Harb, Downtown Cairo');
     expect(field).toHaveDisplayValue('5 Talaat Harb, Downtown Cairo');
+  });
+
+  test('NFR-06 D-47 in Arabic, the pin address comes from the server in Arabic, not the phone language', async () => {
+    await AsyncStorage.setItem('nowaste.language', 'ar');
+    denyLocation();
+    mockedServerAddress.mockResolvedValue('ميدان التحرير، القاهرة');
+    mockedReverse.mockResolvedValue([
+      { formattedAddress: 'Tahrir Square, Cairo' } as Location.LocationGeocodedAddress,
+    ]);
+    await renderApp('/register?role=vendor');
+    await screen.findByText('الموقع');
+
+    await fireEvent.press(screen.getByTestId('map-view'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('العنوان المكتوب')).toHaveDisplayValue('ميدان التحرير، القاهرة');
+    });
+    expect(mockedServerAddress).toHaveBeenCalledWith(30.05, 31.25, 'ar');
+  });
+
+  test('NFR-12 D-47 an unreachable server does not hold back the phone address', async () => {
+    denyLocation();
+    // The server never answers (for example the phone cannot reach the laptop).
+    mockedServerAddress.mockReturnValue(new Promise<string | null>(() => undefined));
+    mockedReverse.mockResolvedValue([
+      { formattedAddress: 'Phone address, Giza' } as Location.LocationGeocodedAddress,
+    ]);
+    await openRegisterAs('Vendor');
+
+    await fireEvent.press(screen.getByTestId('map-view'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Written address')).toHaveDisplayValue('Phone address, Giza');
+    });
+  });
+
+  test('NFR-06 D-47 a slower server address in Arabic replaces the phone address', async () => {
+    await AsyncStorage.setItem('nowaste.language', 'ar');
+    denyLocation();
+    let answerServer: (text: string) => void = () => undefined;
+    mockedServerAddress.mockReturnValue(
+      new Promise<string | null>((resolve) => {
+        answerServer = resolve;
+      }),
+    );
+    mockedReverse.mockResolvedValue([
+      { formattedAddress: 'Tahrir Square, Cairo' } as Location.LocationGeocodedAddress,
+    ]);
+    await renderApp('/register?role=vendor');
+    await screen.findByText('الموقع');
+
+    await fireEvent.press(screen.getByTestId('map-view'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('العنوان المكتوب')).toHaveDisplayValue('Tahrir Square, Cairo');
+    });
+
+    answerServer('ميدان التحرير، القاهرة');
+    await waitFor(() => {
+      expect(screen.getByLabelText('العنوان المكتوب')).toHaveDisplayValue('ميدان التحرير، القاهرة');
+    });
+  });
+
+  test('D-47 a slower server address does not overwrite what the user typed meanwhile', async () => {
+    denyLocation();
+    let answerServer: (text: string) => void = () => undefined;
+    mockedServerAddress.mockReturnValue(
+      new Promise<string | null>((resolve) => {
+        answerServer = resolve;
+      }),
+    );
+    mockedReverse.mockResolvedValue([
+      { formattedAddress: 'Phone address, Giza' } as Location.LocationGeocodedAddress,
+    ]);
+    await openRegisterAs('Vendor');
+    await fireEvent.press(screen.getByTestId('map-view'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Written address')).toHaveDisplayValue('Phone address, Giza');
+    });
+
+    await fireEvent.changeText(screen.getByLabelText('Written address'), 'Building 5, my own words');
+    answerServer('Server address, Giza');
+
+    // Let the server answer be handled before checking the field.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText('Written address')).toHaveDisplayValue('Building 5, my own words');
+  });
+
+  test('IF-UI-02 D-47 in English, the server is asked for the English address', async () => {
+    denyLocation();
+    mockedServerAddress.mockResolvedValue('Tahrir Square, Cairo');
+    await openRegisterAs('Vendor');
+
+    await fireEvent.press(screen.getByTestId('map-view'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Written address')).toHaveDisplayValue('Tahrir Square, Cairo');
+    });
+    expect(mockedServerAddress).toHaveBeenCalledWith(30.05, 31.25, 'en');
+  });
+
+  test('NFR-12 D-47 when the server has no address, the phone geocoder fills it in', async () => {
+    denyLocation();
+    mockedServerAddress.mockResolvedValue(null);
+    mockedReverse.mockResolvedValue([
+      { formattedAddress: 'Phone address, Giza' } as Location.LocationGeocodedAddress,
+    ]);
+    await openRegisterAs('Vendor');
+
+    await fireEvent.press(screen.getByTestId('map-view'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Written address')).toHaveDisplayValue('Phone address, Giza');
+    });
   });
 
   test('FR-ACC-02 an address that cannot be found keeps the pin and says so', async () => {
@@ -612,6 +764,65 @@ describe('IF-HW-03 detect my location again', () => {
       expect(screen.getByLabelText('Written address')).toHaveDisplayValue('New spot, Giza');
     });
     expect(mockedPermission).toHaveBeenCalledTimes(2);
+  });
+
+  test('IF-HW-04 Use my current location with location turned off says to add it by hand or turn location on', async () => {
+    grantLocation();
+    await openRegisterAs('Vendor');
+    await screen.findByText('Pin: 30.03810, 31.21220');
+    mockedServices.mockResolvedValue(false);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Use my current location' }));
+
+    expect(
+      await screen.findByText(
+        'Location is turned off on your phone. Add the location by hand (type the address or tap the map), or turn on location and try again.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Pin: 30.03810, 31.21220')).toBeTruthy();
+  });
+
+  test('IF-HW-04 Use my current location with permission denied says to add it by hand or allow location', async () => {
+    denyLocation();
+    await openRegisterAs('Vendor');
+    await screen.findByText(/needs your location/);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Use my current location' }));
+
+    expect(
+      await screen.findByText(
+        'NoWaste is not allowed to use your location. Add the location by hand (type the address or tap the map), or allow location for NoWaste in your phone settings and try again.',
+      ),
+    ).toBeTruthy();
+  });
+
+  test('IF-HW-04 the Use my current location message disappears once the location is found', async () => {
+    denyLocation();
+    await openRegisterAs('Vendor');
+    await fireEvent.press(screen.getByRole('button', { name: 'Use my current location' }));
+    await screen.findByText(/not allowed to use your location/);
+
+    grantLocation(30.04, 31.22);
+    await fireEvent.press(screen.getByRole('button', { name: 'Use my current location' }));
+
+    expect(await screen.findByText('Pin: 30.04000, 31.22000')).toBeTruthy();
+    expect(screen.queryByText(/not allowed to use your location/)).toBeNull();
+  });
+
+  test('NFR-06 IF-HW-04 the Use my current location message is in Arabic', async () => {
+    await AsyncStorage.setItem('nowaste.language', 'ar');
+    grantLocation();
+    mockedServices.mockResolvedValue(false);
+    await renderApp('/register?role=vendor');
+    await screen.findByText('الموقع');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'استخدم موقعي الحالي' }));
+
+    expect(
+      await screen.findByText(
+        'خدمة الموقع مغلقة في هاتفك. أضف الموقع يدويًا (اكتب العنوان أو اضغط على الخريطة)، أو شغّل خدمة الموقع وحاول مرة أخرى.',
+      ),
+    ).toBeTruthy();
   });
 
   test('IF-HW-04 Use my current location explains the problem when permission is denied', async () => {

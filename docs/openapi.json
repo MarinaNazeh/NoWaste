@@ -1,0 +1,842 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NoWaste API",
+    "version": "0.2.0",
+    "description": "SCRUM-80: the REST contract between the app (C-01) and the API layer (C-02), SDD 3.2.3 IApi. It lists the endpoints that exist today; each later story adds its endpoints here first (SDD IApi still to come: POST /listings, GET /listings/nearby, POST /reservations, POST /reservations/{id}/checkin, POST /pickups/verify, POST /zakat, POST /assistant/message). server/tests/openapi.test.ts fails when the server and this file disagree. Errors use the SRS error ID (CLAUDE.md), for example {\"error\":\"E-ACC-02\",\"fields\":[\"email\"]}. HTTPS with TLS 1.2 or later in production (IF-COM-01)."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Development (npm run dev:server)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "health"
+    },
+    {
+      "name": "auth",
+      "description": "US-01 to US-04"
+    },
+    {
+      "name": "users",
+      "description": "US-04, FR-ACC-09"
+    },
+    {
+      "name": "admin",
+      "description": "US-07, FR-ACC-07"
+    },
+    {
+      "name": "location",
+      "description": "D-47 address of a map pin"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getHealth",
+        "summary": "Server and database status",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Server and database are up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database is down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "register",
+        "summary": "Consumer sign-up, or vendor/partner application (FR-ACC-01, FR-ACC-02, FR-ACC-03)",
+        "description": "A missing role means consumer (Active). Vendors and partners send their profile and start Pending (D-22).",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedUpUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "409": {
+            "description": "E-ACC-01 the email or phone is already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "login",
+        "summary": "Log in with email or phone and password (FR-ACC-04)",
+        "description": "Locked accounts (NFR-09d) get the same E-ACC-03 answer as a wrong password.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Logged in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "E-ACC-03 wrong credentials or account locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "logout",
+        "summary": "End the session of this token (IF-COM-03)",
+        "x-roles": ["consumer", "vendor", "partner", "admin"],
+        "responses": {
+          "204": {
+            "description": "Logged out"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "tags": ["users"],
+        "operationId": "getMe",
+        "summary": "The logged-in account",
+        "x-roles": ["consumer", "vendor", "partner", "admin"],
+        "responses": {
+          "200": {
+            "description": "The account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["users"],
+        "operationId": "patchMe",
+        "summary": "Save the language on the account (FR-ACC-09)",
+        "x-roles": ["consumer", "vendor", "partner", "admin"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["language"],
+                "properties": {
+                  "language": {
+                    "$ref": "#/components/schemas/Language"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/admin/applications": {
+      "get": {
+        "tags": ["admin"],
+        "operationId": "listApplications",
+        "summary": "Vendor and partner applications in one status, oldest first (D-35)",
+        "x-roles": ["admin"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["Pending", "Approved", "Rejected"],
+              "default": "Pending"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The applications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Application"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/admin/applications/{userId}/approve": {
+      "post": {
+        "tags": ["admin"],
+        "operationId": "approveApplication",
+        "summary": "Approve a Pending vendor or partner",
+        "x-roles": ["admin"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Decision"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/NotPending"
+          }
+        }
+      }
+    },
+    "/admin/applications/{userId}/reject": {
+      "post": {
+        "tags": ["admin"],
+        "operationId": "rejectApplication",
+        "summary": "Reject a Pending vendor or partner",
+        "x-roles": ["admin"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Decision"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/NotPending"
+          }
+        }
+      }
+    },
+    "/geocode/reverse": {
+      "get": {
+        "tags": ["location"],
+        "operationId": "reverseGeocode",
+        "summary": "Written address of a map point in the chosen language (D-47)",
+        "description": "Public: applicants place the pin before they have an account. address is null when the service knows no address or is unavailable (NFR-12); the app then uses the phone geocoder.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "latitude",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            }
+          },
+          {
+            "name": "longitude",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Language"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The address, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["address"],
+                  "properties": {
+                    "address": {
+                      "type": ["string", "null"]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token from POST /auth/login (D-32)"
+      }
+    },
+    "parameters": {
+      "UserId": {
+        "name": "userId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "E-ACC-02 invalid fields, named in fields",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InvalidInput": {
+        "description": "invalid_input, the field is named in fields",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "unauthorized: missing, invalid or ended token, or a Removed account (IF-COM-03, E-ACC-06)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "forbidden (role not allowed, NFR-09c), E-ACC-06 (Suspended) or E-ACC-05 (not Approved, food routes)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "not_found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotPending": {
+        "description": "not_pending: the application was already decided; status gives the current status",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Decision": {
+        "description": "The new status",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["userId", "status"],
+              "properties": {
+                "userId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "status": {
+                  "$ref": "#/components/schemas/AccountStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorId": {
+        "type": "string",
+        "description": "SRS error IDs and the few technical codes the server returns",
+        "enum": [
+          "E-ACC-01",
+          "E-ACC-02",
+          "E-ACC-03",
+          "E-ACC-05",
+          "E-ACC-06",
+          "invalid_input",
+          "invalid_json",
+          "unauthorized",
+          "forbidden",
+          "not_found",
+          "not_pending",
+          "internal"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorId"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "field": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": ["status", "db"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "error"]
+          },
+          "db": {
+            "type": "string",
+            "enum": ["ok", "down"]
+          }
+        }
+      },
+      "Language": {
+        "type": "string",
+        "enum": ["ar", "en"]
+      },
+      "Role": {
+        "type": "string",
+        "enum": ["consumer", "vendor", "charity", "composting", "other", "admin"]
+      },
+      "AccountStatus": {
+        "type": "string",
+        "enum": ["Active", "Pending", "Approved", "Rejected", "Suspended", "Removed"]
+      },
+      "FoodCategory": {
+        "type": "string",
+        "description": "SRS Appendix A",
+        "enum": [
+          "bread_and_baked_goods",
+          "cooked_meals",
+          "fruit_and_vegetables",
+          "dairy_and_eggs",
+          "meat_poultry_and_fish",
+          "packaged_and_dry_food"
+        ]
+      },
+      "MapPin": {
+        "type": "object",
+        "required": ["address", "latitude", "longitude"],
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          }
+        }
+      },
+      "VendorProfile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MapPin"
+          },
+          {
+            "type": "object",
+            "required": ["shopName", "vendorType", "contact"],
+            "properties": {
+              "shopName": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "vendorType": {
+                "type": "string",
+                "enum": ["formal", "informal"]
+              },
+              "contact": {
+                "type": "string",
+                "description": "Egyptian mobile or landline, stored as +20 (D-26)"
+              },
+              "description": {
+                "type": ["string", "null"],
+                "maxLength": 300
+              }
+            }
+          }
+        ]
+      },
+      "PartnerProfile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MapPin"
+          },
+          {
+            "type": "object",
+            "required": ["organisationName", "acceptedFoodTypes"],
+            "properties": {
+              "organisationName": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "acceptedFoodTypes": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FoodCategory"
+                    },
+                    {
+                      "const": "other"
+                    }
+                  ]
+                }
+              },
+              "otherPartnerType": {
+                "type": ["string", "null"],
+                "maxLength": 80
+              },
+              "otherFoodType": {
+                "type": ["string", "null"],
+                "maxLength": 80
+              }
+            }
+          }
+        ]
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "description": "Email or phone (one is required) and a password with the US-01 rules (shared validateRegistration).",
+        "required": ["password", "language"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Egyptian mobile (D-12)"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "writeOnly": true
+          },
+          "language": {
+            "$ref": "#/components/schemas/Language"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["consumer", "vendor", "charity", "composting", "other"]
+          },
+          "vendorProfile": {
+            "$ref": "#/components/schemas/VendorProfile"
+          },
+          "partnerProfile": {
+            "$ref": "#/components/schemas/PartnerProfile"
+          }
+        }
+      },
+      "SignedUpUser": {
+        "type": "object",
+        "required": ["id", "role", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["emailOrPhone", "password"],
+        "properties": {
+          "emailOrPhone": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          }
+        }
+      },
+      "SessionUser": {
+        "type": "object",
+        "required": ["id", "role", "status", "language"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "language": {
+            "$ref": "#/components/schemas/Language"
+          }
+        }
+      },
+      "LoginResult": {
+        "type": "object",
+        "required": ["token", "user"],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "JWT, send as Authorization: Bearer <token>"
+          },
+          "user": {
+            "$ref": "#/components/schemas/SessionUser"
+          }
+        }
+      },
+      "Me": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SessionUser"
+          },
+          {
+            "type": "object",
+            "required": ["email", "phone"],
+            "properties": {
+              "email": {
+                "type": ["string", "null"]
+              },
+              "phone": {
+                "type": ["string", "null"]
+              }
+            }
+          }
+        ]
+      },
+      "Application": {
+        "type": "object",
+        "required": [
+          "userId",
+          "role",
+          "status",
+          "email",
+          "phone",
+          "createdAt",
+          "vendorProfile",
+          "partnerProfile"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "email": {
+            "type": ["string", "null"]
+          },
+          "phone": {
+            "type": ["string", "null"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "vendorProfile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VendorProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partnerProfile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartnerProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

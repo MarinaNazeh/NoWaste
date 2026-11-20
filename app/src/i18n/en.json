@@ -164,7 +164,7 @@
   "location": {
     "title": "Location",
     "instructions": "Drag the pin to the exact spot where food is collected, then type the written address.",
-    "permissionDenied": "NoWaste needs your location to place the pin. You can still place it by hand: tap the map, then drag the pin to the exact spot.",
+    "permissionDenied": "NoWaste needs your location to place the pin. You can still enter it by hand: type the written address below, or tap the map, then drag the pin to the exact spot.",
     "mapLabel": "Map: drag the pin to the exact location",
     "noPin": "No pin placed yet",
     "pinAt": "Pin: {{latitude}}, {{longitude}}",
@@ -174,7 +174,9 @@
     "addressNotFound": "We could not find this address on the map. Place the pin by hand: tap the map, then drag the pin to the exact spot.",
     "detect": "Use my current location",
     "detecting": "Finding your location…",
-    "detectHint": "Moves the pin back to where your phone is now"
+    "detectHint": "Moves the pin back to where your phone is now",
+    "detectDenied": "NoWaste is not allowed to use your location. Add the location by hand (type the address or tap the map), or allow location for NoWaste in your phone settings and try again.",
+    "detectServicesOff": "Location is turned off on your phone. Add the location by hand (type the address or tap the map), or turn on location and try again."
   },
   "applied": {
     "title": "Application sent",
