@@ -72,6 +72,9 @@ describe('NFR-01 search speed', () => {
         `median ${String(Math.round([...times].sort((a, b) => a - b)[10] ?? 0))} ms`,
     );
     expect(fast).toBeGreaterThanOrEqual(19);
+    // The random copies are only for this timing. Removing them keeps NFR-11a reliable: a random copy could otherwise
+    // land on a coordinate that starts with the digits NFR-11a searches for (seen in CI on PR #13).
+    await getPool().query('DELETE FROM listings WHERE id <> $1', [listingId]);
   }, 60_000);
 });
 
